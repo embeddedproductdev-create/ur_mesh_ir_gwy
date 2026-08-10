@@ -1,0 +1,1223 @@
+[
+    {
+        "id": "tab_unimation",
+        "type": "tab",
+        "label": "Unimation BLE Mesh",
+        "disabled": false,
+        "info": "BLE Mesh Gateway MQTT Interface\nBroker: 195.250.30.213:1883\nPublish commands to {GwySerNo}/commands\nReceive messages from {GwySerNo}/messages"
+    },
+    {
+        "id": "grp_config",
+        "type": "group",
+        "z": "tab_unimation",
+        "name": "⚙️ Gateway Configuration",
+        "style": {
+            "stroke": "#3A1A8C",
+            "fill": "#F0EFFA",
+            "label": true,
+            "color": "#3A1A8C"
+        },
+        "nodes": [
+            "ui_gwy_id",
+            "ui_gwy_label",
+            "lbl_broker"
+        ],
+        "x": 134,
+        "y": 19,
+        "w": 1352,
+        "h": 142
+    },
+    {
+        "id": "grp_publish",
+        "type": "group",
+        "z": "tab_unimation",
+        "name": "📤 PUBLISH — Send Commands to Gateway",
+        "style": {
+            "stroke": "#00695C",
+            "fill": "#E0F2F1",
+            "label": true,
+            "color": "#00695C"
+        },
+        "nodes": [
+            "inj_register",
+            "inj_unregister",
+            "inj_ac_control",
+            "inj_reconf",
+            "inj_hb_conf",
+            "inj_teaching_start",
+            "inj_teaching_step",
+            "inj_debug",
+            "inj_node_ac",
+            "inj_node_unprov",
+            "inj_node_reconf",
+            "inj_node_hb_conf",
+            "inj_node_teaching",
+            "inj_node_teaching_step",
+            "inj_node_debug",
+            "fn_publish_router",
+            "mqtt_out_cmd"
+        ],
+        "x": 189,
+        "y": 219,
+        "w": 1067,
+        "h": 682
+    },
+    {
+        "id": "grp_subscribe",
+        "type": "group",
+        "z": "tab_unimation",
+        "name": "📥 SUBSCRIBE — Receive Messages from Gateway",
+        "style": {
+            "stroke": "#B71C1C",
+            "fill": "#FFEBEE",
+            "label": true,
+            "color": "#B71C1C"
+        },
+        "nodes": [
+            "mqtt_in_wildcard",
+            "fn_parse_incoming",
+            "dbg_all_raw",
+            "dbg_gwy_register",
+            "dbg_gwy_conf",
+            "dbg_gwy_unreg",
+            "dbg_gwy_ac",
+            "dbg_gwy_manual",
+            "dbg_gwy_heartbeat",
+            "dbg_gwy_hb_conf",
+            "dbg_gwy_teaching",
+            "dbg_gwy_teaching_step",
+            "dbg_gwy_debug",
+            "dbg_node_prov",
+            "dbg_node_conf",
+            "dbg_node_unprov",
+            "dbg_node_ac",
+            "dbg_node_manual",
+            "dbg_node_heartbeat",
+            "dbg_node_hb_conf",
+            "dbg_node_teaching",
+            "dbg_node_teaching_step",
+            "dbg_node_debug",
+            "dbg_unknown",
+            "sw_packet_router"
+        ],
+        "x": 114,
+        "y": 1059,
+        "w": 1352,
+        "h": 982
+    },
+    {
+        "id": "lbl_broker",
+        "type": "comment",
+        "z": "tab_unimation",
+        "g": "grp_config",
+        "name": "Broker: 195.250.30.213:1883  |  User: unimationuser  |  QoS: 2  |  Topics: {GwySerNo}/commands  &  {GwySerNo}/messages",
+        "info": "",
+        "x": 1060,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "ui_gwy_id",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_config",
+        "name": "Set Gateway ID → GWY00001",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "GWY00014",
+        "payloadType": "str",
+        "x": 310,
+        "y": 60,
+        "wires": [
+            [
+                "fn_set_gwy"
+            ]
+        ]
+    },
+    {
+        "id": "fn_set_gwy",
+        "type": "function",
+        "z": "tab_unimation",
+        "g": "grp_config",
+        "name": "Store Gateway ID",
+        "func": "flow.set('GwySerNo', msg.payload);\nnode.status({fill:'green', shape:'dot', text: 'Gateway: ' + msg.payload});\nreturn null;",
+        "outputs": 0,
+        "x": 550,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "ui_gwy_label",
+        "type": "comment",
+        "z": "tab_unimation",
+        "g": "grp_config",
+        "name": "→ Change 'GWY00001' above to switch gateway. Double-click the inject node.",
+        "info": "",
+        "x": 930,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "inj_register",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "GWY Register (ID:0)",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "topic": "",
+        "payload": "{\"JsonPacketID\":0,\"MsgSeqNo\":1,\"Location\":\"Building A Floor 2\"}",
+        "payloadType": "json",
+        "x": 340,
+        "y": 260,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_unregister",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "GWY Unregister (ID:2)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":2,\"MsgSeqNo\":2}",
+        "payloadType": "json",
+        "x": 340,
+        "y": 300,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_ac_control",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "GWY AC Control (ID:3)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":3,\"MsgSeqNo\":3,\"Power\":1,\"Mode\":\"COOL\",\"FanSpeed\":2,\"Temperature\":24,\"SwingH\":0,\"SwingV\":0,\"OnTimer\":0,\"OffTimer\":0,\"Locking\":0,\"TempLockUpLimit\":0,\"TempLockLowLimit\":0}",
+        "payloadType": "json",
+        "x": 340,
+        "y": 340,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_reconf",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "GWY Reconf IR Protocol (ID:5)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":5,\"MsgSeqNo\":4,\"Protocol\":14}",
+        "payloadType": "json",
+        "x": 370,
+        "y": 380,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_hb_conf",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "GWY Set Heartbeat Period (ID:7)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":7,\"MsgSeqNo\":5,\"PublishPeriodSec\":60}",
+        "payloadType": "json",
+        "x": 375,
+        "y": 420,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_teaching_start",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "GWY Teaching Mode Start (ID:8)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":8,\"MsgSeqNo\":6,\"TeachingStart\":1,\"StartingTemperature\":18,\"EndingTemperature\":30,\"ErrorCheckEnabled\":1}",
+        "payloadType": "json",
+        "x": 375,
+        "y": 460,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_teaching_step",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "GWY Teaching Step (ID:9)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":9,\"MsgSeqNo\":7}",
+        "payloadType": "json",
+        "x": 355,
+        "y": 500,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_debug",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "GWY Debug Info (ID:10)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":10,\"MsgSeqNo\":8,\"RestartDevice\":0,\"ResetDevice\":0}",
+        "payloadType": "json",
+        "x": 345,
+        "y": 540,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "cmt_node_cmds",
+        "type": "comment",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "── NODE COMMANDS (forwarded via gateway to BLE Mesh nodes) ──────────────────────────────",
+        "info": "Set ElementAddr to the BLE Mesh unicast address of the target node",
+        "x": 940,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "inj_node_ac",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "NODE AC Control (ID:103)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":103,\"MsgSeqNo\":10,\"ElementAddr\":5,\"Power\":1,\"Mode\":\"COOL\",\"FanSpeed\":2,\"Temperature\":24,\"SwingH\":0,\"SwingV\":0,\"OnTimer\":0,\"OffTimer\":0,\"Locking\":0,\"TempLockUpLimit\":0,\"TempLockLowLimit\":0}",
+        "payloadType": "json",
+        "x": 355,
+        "y": 620,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_node_unprov",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "NODE Unprovision (ID:102)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":102,\"MsgSeqNo\":11,\"ElementAddr\":5}",
+        "payloadType": "json",
+        "x": 355,
+        "y": 660,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_node_reconf",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "NODE Reconf IR Protocol (ID:105)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":105,\"MsgSeqNo\":12,\"ElementAddr\":5,\"Protocol\":14}",
+        "payloadType": "json",
+        "x": 375,
+        "y": 700,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_node_hb_conf",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "NODE Set Heartbeat Period (ID:107)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":107,\"MsgSeqNo\":13,\"ElementAddr\":5,\"PublishPeriodSec\":60}",
+        "payloadType": "json",
+        "x": 380,
+        "y": 740,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_node_teaching",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "NODE Teaching Mode Start (ID:108)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":108,\"MsgSeqNo\":14,\"ElementAddr\":5,\"TeachingStart\":1,\"StartingTemperature\":18,\"EndingTemperature\":30,\"ErrorCheckEnabled\":1}",
+        "payloadType": "json",
+        "x": 380,
+        "y": 780,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_node_teaching_step",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "NODE Teaching Step (ID:109)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":109,\"MsgSeqNo\":15,\"ElementAddr\":5}",
+        "payloadType": "json",
+        "x": 360,
+        "y": 820,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "inj_node_debug",
+        "type": "inject",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "NODE Debug Info (ID:110)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "payload": "{\"JsonPacketID\":110,\"MsgSeqNo\":16,\"ElementAddr\":5,\"RestartDevice\":0,\"ResetDevice\":0}",
+        "payloadType": "json",
+        "x": 355,
+        "y": 860,
+        "wires": [
+            [
+                "fn_publish_router"
+            ]
+        ]
+    },
+    {
+        "id": "fn_publish_router",
+        "type": "function",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "Build Topic → {GwySerNo}/commands",
+        "func": "var gwy = flow.get('GwySerNo') || 'GWY00001';\nmsg.topic = gwy + '/command';\nif (typeof msg.payload === 'object') {\n    msg.payload = JSON.stringify(msg.payload);\n}\nnode.status({fill:'green', shape:'dot', text: 'Sent to ' + msg.topic});\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 820,
+        "y": 520,
+        "wires": [
+            [
+                "mqtt_out_cmd",
+                "dbg_publish"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_out_cmd",
+        "type": "mqtt out",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "PUBLISH",
+        "topic": "",
+        "qos": "2",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "broker_unimation",
+        "x": 1170,
+        "y": 480,
+        "wires": []
+    },
+    {
+        "id": "dbg_publish",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_publish",
+        "name": "Published Payload",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1200,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "mqtt_in_wildcard",
+        "type": "mqtt in",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "+/messages  (all gateways)",
+        "topic": "+/messages",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "broker_unimation",
+        "nl": false,
+        "rap": false,
+        "inputs": 0,
+        "x": 250,
+        "y": 1100,
+        "wires": [
+            [
+                "fn_parse_incoming"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_in_alive",
+        "type": "mqtt in",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "+/alive  (connectivity ping)",
+        "topic": "+/alive",
+        "qos": "0",
+        "datatype": "auto-detect",
+        "broker": "broker_unimation",
+        "nl": false,
+        "rap": false,
+        "inputs": 0,
+        "x": 250,
+        "y": 1140,
+        "wires": [
+            [
+                "dbg_alive"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_in_will",
+        "type": "mqtt in",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "+/will  (gateway offline alert)",
+        "topic": "+/will",
+        "qos": "0",
+        "datatype": "auto-detect",
+        "broker": "broker_unimation",
+        "nl": false,
+        "rap": false,
+        "inputs": 0,
+        "x": 255,
+        "y": 1180,
+        "wires": [
+            [
+                "dbg_will"
+            ]
+        ]
+    },
+    {
+        "id": "dbg_alive",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "💚 Alive Ping",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "payload",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 520,
+        "y": 1140,
+        "wires": []
+    },
+    {
+        "id": "dbg_will",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "🔴 Gateway Offline (Will)",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "payload",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 530,
+        "y": 1180,
+        "wires": []
+    },
+    {
+        "id": "fn_parse_incoming",
+        "type": "function",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "Parse & Route by JsonPacketID",
+        "func": "// Parse payload if string\nvar data = msg.payload;\nif (typeof data === 'string') {\n    try { data = JSON.parse(data); } catch(e) {\n        node.warn('Invalid JSON: ' + msg.payload);\n        return null;\n    }\n}\nmsg.payload = data;\nmsg.packetId = data.JsonPacketID;\nmsg.gwySerNo = data.GwySerNo || 'unknown';\nmsg.nodeSerNo = data.NodeSerNo || null;\nmsg.elementAddr = data.ElementAddr || null;\n\n// Store last seen gateway\nflow.set('LastGateway', msg.gwySerNo);\n\nnode.status({\n    fill: data.ErrorCode === 1 ? 'green' : 'red',\n    shape: 'dot',\n    text: 'ID:' + msg.packetId + ' GWY:' + msg.gwySerNo + (msg.nodeSerNo ? ' NODE:' + msg.nodeSerNo : '')\n});\n\nreturn msg;",
+        "outputs": 1,
+        "x": 560,
+        "y": 1100,
+        "wires": [
+            [
+                "dbg_all_raw",
+                "sw_packet_router"
+            ]
+        ]
+    },
+    {
+        "id": "dbg_all_raw",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "📨 ALL Raw Messages",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1100,
+        "wires": []
+    },
+    {
+        "id": "sw_packet_router",
+        "type": "switch",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "Route by JsonPacketID",
+        "property": "packetId",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "0",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "1",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "2",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "3",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "4",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "6",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "7",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "8",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "9",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "10",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "100",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "101",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "102",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "103",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "104",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "106",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "107",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "108",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "109",
+                "vt": "num"
+            },
+            {
+                "t": "eq",
+                "v": "110",
+                "vt": "num"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "false",
+        "repair": false,
+        "outputs": 21,
+        "x": 780,
+        "y": 1580,
+        "wires": [
+            [
+                "dbg_gwy_register"
+            ],
+            [
+                "dbg_gwy_conf"
+            ],
+            [
+                "dbg_gwy_unreg"
+            ],
+            [
+                "dbg_gwy_ac"
+            ],
+            [
+                "dbg_gwy_manual"
+            ],
+            [
+                "dbg_gwy_heartbeat"
+            ],
+            [
+                "dbg_gwy_hb_conf"
+            ],
+            [
+                "dbg_gwy_teaching"
+            ],
+            [
+                "dbg_gwy_teaching_step"
+            ],
+            [
+                "dbg_gwy_debug"
+            ],
+            [
+                "dbg_node_prov"
+            ],
+            [
+                "dbg_node_conf"
+            ],
+            [
+                "dbg_node_unprov"
+            ],
+            [
+                "dbg_node_ac"
+            ],
+            [
+                "dbg_node_manual"
+            ],
+            [
+                "dbg_node_heartbeat"
+            ],
+            [
+                "dbg_node_hb_conf"
+            ],
+            [
+                "dbg_node_teaching"
+            ],
+            [
+                "dbg_node_teaching_step"
+            ],
+            [
+                "dbg_node_debug"
+            ],
+            [
+                "dbg_unknown"
+            ]
+        ]
+    },
+    {
+        "id": "dbg_gwy_register",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY Register ACK (ID:0)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1180,
+        "wires": []
+    },
+    {
+        "id": "dbg_gwy_conf",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY IR Config ACK (ID:1)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1220,
+        "wires": []
+    },
+    {
+        "id": "dbg_gwy_unreg",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY Unregister ACK (ID:2)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1260,
+        "wires": []
+    },
+    {
+        "id": "dbg_gwy_ac",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY AC Control ACK (ID:3)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1300,
+        "wires": []
+    },
+    {
+        "id": "dbg_gwy_manual",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY Manual AC State (ID:4)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1340,
+        "wires": []
+    },
+    {
+        "id": "dbg_gwy_heartbeat",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY Heartbeat (ID:6)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1380,
+        "wires": []
+    },
+    {
+        "id": "dbg_gwy_hb_conf",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY Heartbeat Period ACK (ID:7)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1260,
+        "y": 1420,
+        "wires": []
+    },
+    {
+        "id": "dbg_gwy_teaching",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY Teaching Mode ACK (ID:8)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1460,
+        "wires": []
+    },
+    {
+        "id": "dbg_gwy_teaching_step",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY Teaching Step ACK (ID:9)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1500,
+        "wires": []
+    },
+    {
+        "id": "dbg_gwy_debug",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "GWY Debug Info ACK (ID:10)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1540,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_prov",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE Provisioned (ID:100)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1600,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_conf",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE IR Config ACK (ID:101)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1640,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_unprov",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE Unprovision ACK (ID:102)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1680,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_ac",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE AC Control ACK + RSSI (ID:103)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1260,
+        "y": 1720,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_manual",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE Manual AC State (ID:104)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1760,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_heartbeat",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE Heartbeat (ID:106)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1800,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_hb_conf",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE Heartbeat Period ACK (ID:107)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1260,
+        "y": 1840,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_teaching",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE Teaching Mode ACK (ID:108)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1880,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_teaching_step",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE Teaching Step ACK (ID:109)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1260,
+        "y": 1920,
+        "wires": []
+    },
+    {
+        "id": "dbg_node_debug",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "NODE Debug Info ACK (ID:110)",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 1960,
+        "wires": []
+    },
+    {
+        "id": "dbg_unknown",
+        "type": "debug",
+        "z": "tab_unimation",
+        "g": "grp_subscribe",
+        "name": "⚠️ Unknown Packet ID",
+        "active": true,
+        "tosidebar": true,
+        "complete": "payload",
+        "x": 1240,
+        "y": 2000,
+        "wires": []
+    },
+    {
+        "id": "broker_unimation",
+        "type": "mqtt-broker",
+        "name": "Unimation Production",
+        "broker": "195.250.30.213",
+        "port": "1883",
+        "clientid": "nodered_unimation",
+        "autoConnect": true,
+        "usetls": false,
+        "compatmode": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    }
+]

@@ -51,6 +51,7 @@ uint16_t teachingModeIrCmds[MAX_CMDS_IN_TEACHING_MODE][TEACHING_MODE_CDM_LEN];
  */
 void print_basic_info()
 {
+    esp_log_level_set("*", ESP_LOG_VERBOSE);
     ESP_LOGW(TAG, "=-=-=-=-=-=-=-=-=-=- BOOT SUCCESSFUL - %d.%d.%d -=-=-=-=-=-=-=-=-=-=", MAJ_VERSION, MIN_VERSION, PATCH_VERSION);
     ESP_LOGI(TAG, "%s : %s - %s", "Compiled Date and Time", __DATE__, __TIME__);
     ESP_LOGI(TAG, "%s : %d", NVS_NEW_DEVICE_KEY, newDevice);

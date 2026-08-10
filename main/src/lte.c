@@ -1102,7 +1102,9 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         }
         else
             cmd_struct->power = power;
-        if (temperature < 18 && temperature > 32)
+
+        // Check Temperature exceding range
+        if (temperature < 18 || temperature > 32)
         {
             cmd_struct->errorcode = TEMPERATURE_EXCEEDING_RANGE;
             return;
@@ -1120,6 +1122,8 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
                 return;
             }
         }
+
+        /* Setting fan speed */ 
         if (!(fanspeed >= 0 && fanspeed <= 5))
         {
             cmd_struct->errorcode = FAN_SPEED_EXCEEDING_RANGE;
@@ -1127,18 +1131,27 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         }
         else
             cmd_struct->fanspeed = fanspeed;
-        if (strcasecmp(mode, "Cool") == 0 ||
-            strcasecmp(mode, "Hot") == 0 ||
-            strcasecmp(mode, "Auto") == 0 ||
-            strcasecmp(mode, "Dry") == 0 ||
-            strcasecmp(mode, "Fan") == 0)
-            ;
-        else
-        {
-            cmd_struct->errorcode = MODE_EXCEEDING_RANGE;
-            return;
-        }
+        // if (strcasecmp(mode, "Cool") == 0 ||
+        //     strcasecmp(mode, "Hot") == 0 ||
+        //     strcasecmp(mode, "Auto") == 0 ||
+        //     strcasecmp(mode, "Dry") == 0 ||
+        //     strcasecmp(mode, "Fan") == 0)
+        //     ;
+        // else
+        // {
+        //     cmd_struct->errorcode = MODE_EXCEEDING_RANGE;
+        //     return;
+        // }
+
+        /* Setting mode_num */ 
         strcpy(cmd_struct->mode_str, mode);
+        if (strcasecmp(mode, "Auto") == 0) cmd_struct->mode_num = 0;  /* stdAc::opmode_t::kAuto */
+        else if (strcasecmp(mode, "Cool") == 0) cmd_struct->mode_num = 1;  /* stdAc::opmode_t::kCool */
+        else if (strcasecmp(mode, "Hot")  == 0) cmd_struct->mode_num = 2;  /* stdAc::opmode_t::kHeat */
+        else if (strcasecmp(mode, "Dry")  == 0) cmd_struct->mode_num = 3;  /* stdAc::opmode_t::kDry  */
+        else if (strcasecmp(mode, "Fan")  == 0) cmd_struct->mode_num = 4;  /* stdAc::opmode_t::kFan  */
+
+        /* Setting Swing Horizontal  */ 
         if (swingh != 0 && swingh != 1)
         {
             cmd_struct->errorcode = SWINGH_EXCEEDING_RANGE;
@@ -1146,6 +1159,8 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         }
         else
             cmd_struct->swingh = swingh;
+
+        /* Setting Swing Vertical */  
         if (swingv != 0 && swingv != 1)
         {
             cmd_struct->errorcode = SWINGV_EXCEEDING_RANGE;
@@ -1153,6 +1168,8 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         }
         else
             cmd_struct->swingv = swingv;
+
+        /* Locking Check */ 
         if (locking != 0 && locking != 1)
         {
             cmd_struct->errorcode = LOCKING_EXCEEDING_RANGE;
@@ -1160,6 +1177,8 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         }
         else
             cmd_struct->locking = locking;
+
+        /* On Timer Check */ 
         if (!(ontimer >= 0 && ontimer <= 12))
         {
             cmd_struct->errorcode = ONTIMER_EXCEEDING_RANGE;
@@ -1167,6 +1186,8 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         }
         else
             cmd_struct->ontimer = ontimer;
+
+        /* Off timer check */ 
         if (!(offtimer >= 0 && offtimer <= 12))
         {
             cmd_struct->errorcode = OFFTIMER_EXCEEDING_RANGE;
@@ -1174,6 +1195,8 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         }
         else
             cmd_struct->offtimer = offtimer;
+
+        /* Upper Temperature Limit check  */ 
         if (upperTemperatureLimit < 18 || upperTemperatureLimit > 32)
         {
             cmd_struct->errorcode = TEMPERATURE_UPPER_LIMIT_EXCEEDING_RANGE;
@@ -1181,6 +1204,8 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         }
         else
             cmd_struct->upperTemperatureLimit = upperTemperatureLimit;
+
+        /* Lower Temperature Limit check */  
         if (lowerTemperatureLimit < 18 || lowerTemperatureLimit > 32)
         {
             cmd_struct->errorcode = TEMPERATURE_LOWER_LIMIT_EXCEEDING_RANGE;
@@ -1188,6 +1213,7 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         }
         else
             cmd_struct->lowerTemperatureLimit = lowerTemperatureLimit;
+
         if (upperTemperatureLimit < lowerTemperatureLimit)
         {
             ESP_LOGD(LTE_TAG, "UL : %d | LL : %d", upperTemperatureLimit, lowerTemperatureLimit);
@@ -1214,7 +1240,7 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
             int publishperiod = cJSONTestValue->valueint;
             if(!(publishperiod>= DEFAULT_PUBLISH_PERIOD_SEC && publishperiod <= 65535)) cmd_struct->errorcode = PUBLISH_PERIOD_EXCEEDING_RANGE;
             else cmd_struct->publishPeriodSec = publishperiod;
-            cmd_struct->publishPeriodSec = publishperiod;
+            // cmd_struct->publishPeriodSec = publishperiod;
             return;
         }
     }
