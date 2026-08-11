@@ -178,6 +178,11 @@ void ir_transmit()
         ir_protocol_num);
     vTaskDelay(pdMS_TO_TICKS(1000));
     led_set_state(LED_STATE_SENDING_IR_COMMAND);
+
+    // Boost priority to prevent task preemption during IR bit-bang transmission
+    UBaseType_t prev_priority = uxTaskPriorityGet(NULL);
+    vTaskPrioritySet(NULL, configMAX_PRIORITIES - 1);
+
     switch (ir_protocol_num)
     {
     case CARRIER_AC64:
@@ -189,11 +194,8 @@ void ir_transmit()
         ac_carrier64.setFan(ac_carrier64.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_carrier64.setOnTimer(last_command.ontimer * 60);
         ac_carrier64.setOffTimer(last_command.offtimer * 60);
-        ac_carrier64.setMode(ac_carrier64.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS();    
+        ac_carrier64.setMode(ac_carrier64.convertMode((stdAc::opmode_t)last_command.mode_num));   
         ac_carrier64.send();    // ~100ms of uninterrupted bit-bang timing
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case DAIKIN:
@@ -211,11 +213,8 @@ void ir_transmit()
         ac_daikin280.setFan(ac_daikin280.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_daikin280.enableOffTimer(last_command.offtimer);
         ac_daikin280.enableOnTimer(last_command.ontimer);
-        ac_daikin280.setMode(ac_daikin280.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS();    
+        ac_daikin280.setMode(ac_daikin280.convertMode((stdAc::opmode_t)last_command.mode_num));   
         ac_daikin280.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case DAIKIN200:
@@ -227,10 +226,7 @@ void ir_transmit()
         ac_daikin200.setFan(last_command.fanspeed);
         ac_daikin200.setTemp(last_command.temperature);
         ac_daikin200.setMode(ac_daikin200.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_daikin200.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case DAIKIN216:
@@ -247,10 +243,7 @@ void ir_transmit()
         ac_daikin216.setSwingVertical(last_command.swingv);
         ac_daikin216.setFan(ac_daikin216.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_daikin216.setMode(ac_daikin216.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_daikin216.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case DAIKIN2:
@@ -271,10 +264,7 @@ void ir_transmit()
         ac_daikin2.enableOffTimer(last_command.offtimer);
         ac_daikin2.enableOnTimer(last_command.ontimer);
         ac_daikin2.setMode(ac_daikin2.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_daikin2.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case DAIKIN160:
@@ -286,11 +276,8 @@ void ir_transmit()
         if (last_command.swingv)
             ac_daikin160.setSwingVertical(kDaikin160SwingVAuto);
         ac_daikin160.setFan(ac_daikin160.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
-        ac_daikin160.setMode(ac_daikin160.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
+        ac_daikin160.setMode(ac_daikin160.convertMode((stdAc::opmode_t)last_command.mode_num)); 
         ac_daikin160.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case DAIKIN176:
@@ -305,10 +292,7 @@ void ir_transmit()
             ac_daikin176.setSwingHorizontal(kDaikin176SwingHOff);
         ac_daikin176.setFan(ac_daikin176.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_daikin176.setMode(ac_daikin176.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_daikin176.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case DAIKIN64:
@@ -322,10 +306,7 @@ void ir_transmit()
         ac_daikinac64.setOnTime(last_command.offtimer);
         ac_daikinac64.setOffTime(last_command.ontimer);
         ac_daikinac64.setMode(ac_daikinac64.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_daikinac64.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case DAIKIN152:
@@ -337,10 +318,7 @@ void ir_transmit()
         ac_daikin152.setSwingV(last_command.swingv);
         ac_daikin152.setFan(ac_daikin152.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_daikin152.setMode(ac_daikin152.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_daikin152.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case DAIKIN128:
@@ -353,11 +331,8 @@ void ir_transmit()
         ac_daikin128.setFan(ac_daikin128.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_daikin128.setOffTimer(last_command.offtimer);
         ac_daikin128.setOnTimer(last_command.ontimer);
-        ac_daikin128.setMode(ac_daikin128.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
+        ac_daikin128.setMode(ac_daikin128.convertMode((stdAc::opmode_t)last_command.mode_num)); 
         ac_daikin128.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case HAIER_AC:
@@ -366,11 +341,8 @@ void ir_transmit()
         ac_haier.setFan(ac_haier.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_haier.setOffTimer(last_command.offtimer);
         ac_haier.setOnTimer(last_command.ontimer);
-        ac_haier.setMode(ac_haier.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
+        ac_haier.setMode(ac_haier.convertMode((stdAc::opmode_t)last_command.mode_num)); 
         ac_haier.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case HAIER_AC176:
@@ -382,10 +354,7 @@ void ir_transmit()
         ac_haier176.setOffTimer(last_command.offtimer);
         ac_haier176.setOnTimer(last_command.ontimer);
         ac_haier176.setMode(ac_haier176.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_haier176.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case HAIER_AC160:
@@ -396,10 +365,7 @@ void ir_transmit()
         ac_haier160.setOffTimer(last_command.offtimer);
         ac_haier160.setOnTimer(last_command.ontimer);
         ac_haier160.setMode(ac_haier160.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_haier160.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case HITACHI_AC296:
@@ -407,10 +373,7 @@ void ir_transmit()
         ac_hitachi296.setTemp(last_command.temperature);
         ac_hitachi296.setFan(ac_hitachi296.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_hitachi296.setMode(ac_hitachi296.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_hitachi296.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case HITACHI_AC:
@@ -420,10 +383,7 @@ void ir_transmit()
         ac_hitachi224.setSwingHorizontal(last_command.swingh);
         ac_hitachi224.setSwingVertical(last_command.swingv);
         ac_hitachi224.setMode(ac_hitachi224.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_hitachi224.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case HITACHI_AC1:
@@ -435,10 +395,7 @@ void ir_transmit()
         ac_hitachi104.setOffTimer(last_command.offtimer);
         ac_hitachi104.setOnTimer(last_command.ontimer);
         ac_hitachi104.setMode(ac_hitachi104.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_hitachi104.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case HITACHI_AC424:
@@ -447,27 +404,18 @@ void ir_transmit()
         ac_hitachi424.setFan(ac_hitachi424.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_hitachi424.setSwingVToggle(last_command.swingv);
         ac_hitachi424.setMode(ac_hitachi424.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_hitachi424.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case HITACHI_AC344:
         ac_hitachi344.setSwingH(last_command.swingh);
         ac_hitachi344.setSwingV(last_command.swingv);
-        portDISABLE_INTERRUPTS(); 
         ac_hitachi344.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case HITACHI_AC264:
         ac_hitachi264.setFan(ac_hitachi264.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
-        portDISABLE_INTERRUPTS(); 
         ac_hitachi264.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case LG2:
@@ -478,10 +426,7 @@ void ir_transmit()
         ac_lg.setSwingV(last_command.swingv);
         ac_lg.setFan(ac_lg.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_lg.setMode(ac_lg.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_lg.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case MITSUBISHI112:
@@ -491,10 +436,7 @@ void ir_transmit()
         ac_mitsubishi112.setSwingV(last_command.swingv);
         ac_mitsubishi112.setFan(ac_mitsubishi112.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_mitsubishi112.setMode(ac_mitsubishi112.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_mitsubishi112.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case MITSUBISHI136:
@@ -506,10 +448,7 @@ void ir_transmit()
         }
         ac_mitsubishi136.setFan(ac_mitsubishi136.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_mitsubishi136.setMode(ac_mitsubishi136.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_mitsubishi136.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case MITSUBISHI_AC:
@@ -517,10 +456,7 @@ void ir_transmit()
         ac_mitsubishi144.setTemp(last_command.temperature);
         ac_mitsubishi144.setFan(ac_mitsubishi144.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
         ac_mitsubishi144.setMode(ac_mitsubishi144.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_mitsubishi144.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case MITSUBISHI_HEAVY_88:
@@ -536,10 +472,7 @@ void ir_transmit()
         else
             ac_mitsubishi88.setSwingVertical(kMitsubishiHeavy88SwingVOff);
         ac_mitsubishi88.setMode(ac_mitsubishi88.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_mitsubishi88.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case MITSUBISHI_HEAVY_152:
@@ -555,24 +488,17 @@ void ir_transmit()
         else
             ac_mitsubishi152.setSwingVertical(kMitsubishiHeavy88SwingVOff);
         ac_mitsubishi152.setMode(ac_mitsubishi152.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_mitsubishi152.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case RAW:
         if (!last_command.power)
         {
-            portDISABLE_INTERRUPTS(); 
             ac_custom.sendRaw(teachingModeIrCmds[0], teaching_mode_raw_len, RAW_FREQ);
-            portENABLE_INTERRUPTS();
         }
         else
         {
-            portDISABLE_INTERRUPTS(); 
             ac_custom.sendRaw(teachingModeIrCmds[last_command.temperature - MAX_LOW_TEMP + 1], teaching_mode_raw_len, RAW_FREQ);
-            portENABLE_INTERRUPTS();
         }
         vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
@@ -586,10 +512,7 @@ void ir_transmit()
         ac_samsung.setOffTimer(last_command.offtimer);
         ac_samsung.setOnTimer(last_command.ontimer);
         ac_samsung.setMode(ac_samsung.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_samsung.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case VOLTAS:
@@ -601,10 +524,7 @@ void ir_transmit()
         ac_voltas.setOffTime(last_command.offtimer);
         ac_voltas.setOnTime(last_command.ontimer);
         ac_voltas.setMode(ac_voltas.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_voltas.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
 
     case TOSHIBA_AC:
@@ -616,12 +536,11 @@ void ir_transmit()
         else
             ac_toshiba.setSwing(kToshibaAcSwingOff);
         ac_toshiba.setMode(ac_toshiba.convertMode((stdAc::opmode_t)last_command.mode_num));
-        portDISABLE_INTERRUPTS(); 
         ac_toshiba.send();
-        portENABLE_INTERRUPTS();
-        vTaskDelay(0);    // yield to scheduler, sufficient for ~100ms transmission
         break;
     }
+    // Restore original task priority
+    vTaskPrioritySet(NULL, prev_priority);
     irrecv.resume();
 }
 
