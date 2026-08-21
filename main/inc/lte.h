@@ -251,6 +251,7 @@ typedef enum
 	GWY_DEBUG_INFO_PACKET,
 	MAX_GWY_PACKET_ID,
     GWY_GENERAL_PACKET, 
+    GWY_AC_CONTROL_ACK,        // 13 — ACK sent to cloud after GWY AC control
 
 	/* NODE PACKETS */
 	NODE_PROV_PACKET = 100,
@@ -266,6 +267,7 @@ typedef enum
 	NODE_DEBUG_INFO_PACKET,
 	MAX_NODE_PACKET_ID,
     NODE_GENERAL_PACKET,
+    NODE_AC_CONTROL_ACK,       // 113 — ACK sent to cloud after NODE AC control
     
     /*MISC*/
     TEST_PACKET = 999
@@ -336,6 +338,17 @@ typedef struct
     char temperature[4];              // 4 bytes
     char power[4];                    // 4 bytes
     char fan[2];                      // 2 bytes
+    // Added for currACState support
+    int8_t rssi;                      // 1 byte
+    int8_t swingh;                    // 1 byte
+    int8_t swingv;                    // 1 byte
+    int8_t ontimer;                   // 1 byte
+    int8_t offtimer;                  // 1 byte
+    int8_t locking;                   // 1 byte
+    int8_t upperTemperatureLimit;     // 1 byte
+    int8_t lowerTemperatureLimit;     // 1 byte
+    int16_t ambientTemperatureDigital;// 2 bytes
+    int16_t ambientTemperatureAnalog; // 2 bytes
 } manual_control;
 
 

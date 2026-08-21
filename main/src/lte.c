@@ -126,7 +126,7 @@ const char *STARTING_TEMPERATURE_KEY = "StartingTemperature";
 const char *ENDING_TEMPERATURE_KEY = "EndingTemperature";
 const char *POWER_ERROR_KEY = "PowerErrorCode";
 const char *TEMPERATURE_ERROR_KEY = "TemperatureErrorCode";
-const char *FANSPEED_ERROR_KEY = "FanspeedErrorCode";
+const char *FANSPEED_ERROR_KEY = "FanSpeedErrorCode";
 const char *MODE_ERROR_KEY = "ModeErrorCode";
 const char *LAST_CMD_KEY = "LastCommand";
 const char *NEXT_CMD_KEY = "NextCommand";
@@ -136,6 +136,7 @@ const char *BLE_ERROR_CODE_KEY = "BleErrorCode";
 const char *MESSAGE_KEY = "Message";
 const char *ERROR_CHK_ENABLED_KEY = "ErrorCheckEnabled";
 const char *RSSI_KEY = "RSSI_dBm";
+
 
 bool powerDownFlag = false;
 
@@ -162,9 +163,12 @@ QueueHandle_t command_queue;
  */
 int mqtt_publish(char *ack, char *topic)
 {
+    // ESP_LOGW(LTE_TAG, "mqtt_publish called | mqtt_connected=%d | topic=%s | payload=%s", 
+    //     mqtt_connected, topic, ack);
+
     char MQTT_PUBLISH_MESG_CMD[1024];
     sprintf(MQTT_PUBLISH_MESG_CMD, "AT+QMTPUBEX=2,2,2,0,\"%s\",%d\r\n", topic, strlen(ack));
-    if (send_cmd_and_check_response(LOG_DATA, MQTT_PUBLISH_MESG_CMD, "PUBLISH_TO_MQTT", ">", 1000) == SUCCESS)
+    if (send_cmd_and_check_response(LOG_DATA, MQTT_PUBLISH_MESG_CMD, "PUBLISH_TO_MQTT", ">", 1500) == SUCCESS)
     {
         if (uart_write_bytes(UART_NUM_1, ack, strlen(ack)) != FAILURE)
         {
@@ -188,18 +192,15 @@ int mqtt_publish(char *ack, char *topic)
 void publish_from_queue()
 {
     char *ack_message;
-    while (xQueueReceive(publish_queue, &ack_message, 0) == pdPASS)
+    if (xQueueReceive(publish_queue, &ack_message, 0) == pdPASS)
     {
         if (mqtt_publish(ack_message, publish_topic) != SUCCESS)
         {
             ESP_LOGE(LTE_TAG, "Failed to publish ACK message to MQTT broker.\n");
-            free(ack_message);
         }
-        else
-        {
-            free(ack_message);
-        }
-        ESP_LOGW(LTE_TAG, "Current publish queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(publish_queue), esp_get_minimum_free_heap_size());
+        free(ack_message);
+        ESP_LOGW(LTE_TAG, "Current publish queue count : %d | Heap : %" PRIu32 " bytes",
+            uxQueueMessagesWaiting(publish_queue), esp_get_minimum_free_heap_size());
     }
 }
 
@@ -234,14 +235,30 @@ void generate_node_manual_ac_control_ack(manual_control *node_ac_manual_control_
     jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
     jwObj_string(&jwc, NODE_SER_NO_KEY, node_ac_manual_control_t->deviceName);
     jwObj_int(&jwc, ELEMENT_ADDR_KEY, node_ac_manual_control_t->elemAddr);
+    jwObj_int(&jwc, RSSI_KEY, node_ac_manual_control_t->rssi);
     jwObj_int(&jwc, POWER_KEY, node_ac_manual_control_t->power_value);
     jwObj_int(&jwc, DETECTED_TEMPERATURE_KEY, node_ac_manual_control_t->temperature_value);
     jwObj_int(&jwc, FAN_SPEED_KEY, node_ac_manual_control_t->fanspeed_value);
     jwObj_string(&jwc, MODE_KEY, node_ac_manual_control_t->mode);
     jwObj_int(&jwc, POWER_ERROR_KEY, node_ac_manual_control_t->power_err);
     jwObj_int(&jwc, TEMPERATURE_ERROR_KEY, node_ac_manual_control_t->temperature_err);
-    jwObj_int(&jwc, FAN_SPEED_KEY, node_ac_manual_control_t->fanspeed_err);
+    jwObj_int(&jwc, FANSPEED_ERROR_KEY, node_ac_manual_control_t->fanspeed_err);
     jwObj_int(&jwc, MODE_ERROR_KEY, node_ac_manual_control_t->mode_err);
+    jwObj_object(&jwc, "currACState");
+        jwObj_int(&jwc, POWER_KEY, node_ac_manual_control_t->power_value);
+        jwObj_string(&jwc, MODE_KEY, node_ac_manual_control_t->mode);
+        jwObj_int(&jwc, FAN_SPEED_KEY, node_ac_manual_control_t->fanspeed_value);
+        jwObj_int(&jwc, TEMPERATURE_KEY, node_ac_manual_control_t->temperature_value);
+        jwObj_int(&jwc, AMBIENT_TEMPERATURE_DIGITAL_DATA_KEY, node_ac_manual_control_t->ambientTemperatureDigital);
+        jwObj_int(&jwc, AMBIENT_TEMPERATURE_ANALOG_DATA_KEY, node_ac_manual_control_t->ambientTemperatureAnalog);
+        jwObj_int(&jwc, SWING_H_KEY, node_ac_manual_control_t->swingh);
+        jwObj_int(&jwc, SWING_V_KEY, node_ac_manual_control_t->swingv);
+        jwObj_int(&jwc, ONTIMER_KEY, node_ac_manual_control_t->ontimer);
+        jwObj_int(&jwc, OFFTIMER_KEY, node_ac_manual_control_t->offtimer);
+        jwObj_int(&jwc, AC_LOCKING_KEY, node_ac_manual_control_t->locking);
+        jwObj_int(&jwc, UPPER_TEMPERATURE_LIMIT_KEY, node_ac_manual_control_t->upperTemperatureLimit);
+        jwObj_int(&jwc, LOWER_TEMPERATURE_LIMIT_KEY, node_ac_manual_control_t->lowerTemperatureLimit);
+    jwEnd(&jwc);
     jwEnd(&jwc);
     jwClose(&jwc);
     enqueue_for_publish(buffer);
@@ -310,7 +327,7 @@ void generate_and_publish_debug_info_ack(CommandStruct *ack)
 
     char MQTT_PUBLISH_MESG_CMD[MQTT_CMD_RESP_LEN];
     sprintf(MQTT_PUBLISH_MESG_CMD, "AT+QMTPUBEX=2,2,2,0,\"%s\",%d\r\n", publish_topic, strlen(buffer));
-    if (send_cmd_and_check_response(LOG_DATA, MQTT_PUBLISH_MESG_CMD, "PUBLISH_TO_MQTT", ">", 1000) == SUCCESS)
+    if (send_cmd_and_check_response(LOG_DATA, MQTT_PUBLISH_MESG_CMD, "PUBLISH_TO_MQTT", ">", 1500) == SUCCESS)
     {
         if (uart_write_bytes(UART_NUM_1, ack, strlen(buffer)) == SUCCESS)
             ;
@@ -446,15 +463,32 @@ void generate_ack(mqtt_packets packetid, CommandStruct *cmd_struct)
         jwObj_int(&jwc, BLE_ERROR_CODE_KEY, cmd_struct->bleErrorCode);
         break;
 
-    case GWY_AC_CONTROL_PACKET:
+    case GWY_AC_CONTROL_ACK:
         jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
         jwObj_int(&jwc, MSG_SEQ_NO_KEY, cmd_struct->msgseqno);
         jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
         jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
         jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
+        jwObj_object(&jwc, "currACState");
+            jwObj_int(&jwc, POWER_KEY, last_command.power);
+            jwObj_string(&jwc, MODE_KEY, last_command.mode_str);
+            jwObj_int(&jwc, FAN_SPEED_KEY, last_command.fanspeed);
+            jwObj_int(&jwc, TEMPERATURE_KEY, last_command.temperature);
+            last_command.ambientTemperatureAnalog = read_analog_temperature_sensor();
+            last_command.ambientTemperatureDigital = read_digital_temperature_sensor();
+            jwObj_int(&jwc, AMBIENT_TEMPERATURE_DIGITAL_DATA_KEY, last_command.ambientTemperatureDigital);
+            jwObj_int(&jwc, AMBIENT_TEMPERATURE_ANALOG_DATA_KEY, last_command.ambientTemperatureAnalog);
+            jwObj_int(&jwc, SWING_H_KEY, last_command.swingh);
+            jwObj_int(&jwc, SWING_V_KEY, last_command.swingv);
+            jwObj_int(&jwc, ONTIMER_KEY, last_command.ontimer);
+            jwObj_int(&jwc, OFFTIMER_KEY, last_command.offtimer);
+            jwObj_int(&jwc, AC_LOCKING_KEY, last_command.locking);
+            jwObj_int(&jwc, UPPER_TEMPERATURE_LIMIT_KEY, last_command.upperTemperatureLimit);
+            jwObj_int(&jwc, LOWER_TEMPERATURE_LIMIT_KEY, last_command.lowerTemperatureLimit);
+        jwEnd(&jwc);
         break;
 
-    case NODE_AC_CONTROL_PACKET:
+    case NODE_AC_CONTROL_ACK:
         jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
         jwObj_int(&jwc, MSG_SEQ_NO_KEY, cmd_struct->msgseqno);
         jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
@@ -464,6 +498,21 @@ void generate_ack(mqtt_packets packetid, CommandStruct *cmd_struct)
         jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
         jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
         jwObj_int(&jwc, BLE_ERROR_CODE_KEY, cmd_struct->bleErrorCode);
+        jwObj_object(&jwc, "currACState");
+            jwObj_int(&jwc, POWER_KEY, cmd_struct->power);
+            jwObj_string(&jwc, MODE_KEY, cmd_struct->mode_str);
+            jwObj_int(&jwc, FAN_SPEED_KEY, cmd_struct->fanspeed);
+            jwObj_int(&jwc, TEMPERATURE_KEY, cmd_struct->temperature);
+            jwObj_int(&jwc, AMBIENT_TEMPERATURE_DIGITAL_DATA_KEY, cmd_struct->ambientTemperatureDigital);
+            jwObj_int(&jwc, AMBIENT_TEMPERATURE_ANALOG_DATA_KEY, cmd_struct->ambientTemperatureAnalog);
+            jwObj_int(&jwc, SWING_H_KEY, cmd_struct->swingh);
+            jwObj_int(&jwc, SWING_V_KEY, cmd_struct->swingv);
+            jwObj_int(&jwc, ONTIMER_KEY, cmd_struct->ontimer);
+            jwObj_int(&jwc, OFFTIMER_KEY, cmd_struct->offtimer);
+            jwObj_int(&jwc, AC_LOCKING_KEY, cmd_struct->locking);
+            jwObj_int(&jwc, UPPER_TEMPERATURE_LIMIT_KEY, cmd_struct->upperTemperatureLimit);
+            jwObj_int(&jwc, LOWER_TEMPERATURE_LIMIT_KEY, cmd_struct->lowerTemperatureLimit);
+        jwEnd(&jwc);
         break;
 
     case GWY_HEARTBEAT_ACK:
@@ -583,8 +632,25 @@ void generate_ack(mqtt_packets packetid, CommandStruct *cmd_struct)
         jwObj_string(&jwc, MODE_KEY, ac_manual_control_t.mode);
         jwObj_int(&jwc, POWER_ERROR_KEY, ac_manual_control_t.power_err);
         jwObj_int(&jwc, TEMPERATURE_ERROR_KEY, ac_manual_control_t.temperature_err);
-        jwObj_int(&jwc, FAN_SPEED_KEY, ac_manual_control_t.fanspeed_err);
+        jwObj_int(&jwc, FANSPEED_ERROR_KEY, ac_manual_control_t.fanspeed_err);
         jwObj_int(&jwc, MODE_ERROR_KEY, ac_manual_control_t.mode_err);
+        jwObj_object(&jwc, "currACState");
+            jwObj_int(&jwc, POWER_KEY, last_command.power);
+            jwObj_string(&jwc, MODE_KEY, last_command.mode_str);
+            jwObj_int(&jwc, FAN_SPEED_KEY, last_command.fanspeed);
+            jwObj_int(&jwc, TEMPERATURE_KEY, last_command.temperature);
+            last_command.ambientTemperatureAnalog = read_analog_temperature_sensor();
+            last_command.ambientTemperatureDigital = read_digital_temperature_sensor();
+            jwObj_int(&jwc, AMBIENT_TEMPERATURE_DIGITAL_DATA_KEY, last_command.ambientTemperatureDigital);
+            jwObj_int(&jwc, AMBIENT_TEMPERATURE_ANALOG_DATA_KEY, last_command.ambientTemperatureAnalog);
+            jwObj_int(&jwc, SWING_H_KEY, last_command.swingh);
+            jwObj_int(&jwc, SWING_V_KEY, last_command.swingv);
+            jwObj_int(&jwc, ONTIMER_KEY, last_command.ontimer);
+            jwObj_int(&jwc, OFFTIMER_KEY, last_command.offtimer);
+            jwObj_int(&jwc, AC_LOCKING_KEY, last_command.locking);
+            jwObj_int(&jwc, UPPER_TEMPERATURE_LIMIT_KEY, last_command.upperTemperatureLimit);
+            jwObj_int(&jwc, LOWER_TEMPERATURE_LIMIT_KEY, last_command.lowerTemperatureLimit);
+        jwEnd(&jwc);
         break;
 
     case GWY_DEBUG_INFO_PACKET:
@@ -1524,7 +1590,8 @@ void parse_json()
 
         case GWY_AC_CONTROL_PACKET:
             handle_ac_control(&cmd_struct);
-            break;
+            generate_ack(GWY_AC_CONTROL_ACK, &cmd_struct);
+            return;
 
         case GWY_RECONF_PACKET:
             handle_reconfiguration(&cmd_struct);
@@ -1557,8 +1624,11 @@ void parse_json()
         case GWY_TEACHING_MODE_CMD_SELECTION_PACKET:
             break;
 
-        case NODE_UNPROV_PACKET:
         case NODE_AC_CONTROL_PACKET:
+            send_cmd_to_node(&cmd_struct);
+            ESP_LOGW(LTE_TAG, "Currnet command queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(command_queue), esp_get_minimum_free_heap_size());
+            return;
+        case NODE_UNPROV_PACKET:
         case NODE_DEBUG_INFO_PACKET:
         case NODE_RECONF_PACKET:
         case NODE_HEARTBEAT_PUB_CONF_PACKET:
@@ -1573,7 +1643,7 @@ void parse_json()
         }
         generate_ack(cmd_struct.packetid, &cmd_struct);
     }
-    else
+    else     /* Received MQTT payload from cloud is malformed */
     {
         led_set_state(LED_STATE_INVALID_OPERATION);
 
@@ -1590,7 +1660,12 @@ void parse_json()
             return;
         }
         strcpy(cmd_struct.deviceName, "");
-        generate_ack(cmd_struct.packetid, &cmd_struct);
+        if (cmd_struct.packetid == GWY_AC_CONTROL_PACKET)
+            generate_ack(GWY_AC_CONTROL_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == NODE_AC_CONTROL_PACKET)
+            generate_ack(NODE_AC_CONTROL_ACK, &cmd_struct);
+        else
+            generate_ack(cmd_struct.packetid, &cmd_struct);
     }
 }
 

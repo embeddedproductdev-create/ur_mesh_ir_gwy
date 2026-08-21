@@ -14,6 +14,9 @@
 #include <json_maker.h>
 #include <cJSON.h>
 
+extern "C" {
+#include <temperature_sensor.h>
+}
 
 #define RAW_FREQ 41
 
@@ -47,6 +50,8 @@ const char *MITSUBISHI136_IR_PROTOCOL = "MITSUBISHI136";
 const char *MITSUBISHI_AC_IR_PROTOCOL = "MITSUBISHI_AC";
 const char *MITSUBISHI_HEAVY_88_IR_PROTOCOL = "MITSUBISHI_HEAVY_88";
 const char *MITSUBISHI_HEAVY_152_IR_PROTOCOL = "MITSUBISHI_HEAVY_152";
+const char *COOLIX_IR_PROTOCOL = "COOLIX";
+const char *FUJITSU_AC_IR_PROTOCOL = "FUJITSU_AC";
 const char *UNKNOWN_IR_PROTOCOL = "UNKNOWN";
 const char *UNUSED_IR_PROTOCOL = "UNUSED";
 const char *INVALID_IR_PROTOCOL = "INVALID";
@@ -120,6 +125,10 @@ IRToshibaAC ac_toshiba(IR_TRAN_GPIO);
 
 IRVoltas ac_voltas(IR_TRAN_GPIO);
 
+IRCoolixAC ac_coolix(IR_TRAN_GPIO);
+
+IRFujitsuAC ac_fujitsu(IR_TRAN_GPIO, ARRAH2E);
+
 IRsend ac_custom(IR_TRAN_GPIO);
 IRsend ac_general(IR_TRAN_GPIO);
 
@@ -159,6 +168,8 @@ void ir_tran_setup()
     ac_mitsubishi144.begin();
     ac_mitsubishi88.begin();
     ac_mitsubishi152.begin();
+    ac_coolix.begin();
+    ac_fujitsu.begin();
     ac_custom.begin();
 }
 
@@ -538,6 +549,40 @@ void ir_transmit()
         ac_toshiba.setMode(ac_toshiba.convertMode((stdAc::opmode_t)last_command.mode_num));
         ac_toshiba.send();
         break;
+
+    case COOLIX:
+        ac_coolix.setPower(last_command.power);
+        if (!last_command.power)
+        {
+            // Coolix protocol: send immediately after power off, no other params
+            ac_coolix.send();
+            break;
+        }
+        ac_coolix.setTemp(last_command.temperature);
+        // Mode must be set before fan for Coolix
+        ac_coolix.setMode(ac_coolix.convertMode((stdAc::opmode_t)last_command.mode_num));
+        // Fan must be set after mode as setMode can change fan speed
+        ac_coolix.setFan(ac_coolix.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
+        ac_coolix.send();
+        break;
+
+    case FUJITSU_AC:
+        ac_fujitsu.setPower(last_command.power);
+        ac_fujitsu.setTemp(last_command.temperature);
+        ac_fujitsu.setMode(ac_fujitsu.convertMode((stdAc::opmode_t)last_command.mode_num));
+        ac_fujitsu.setFanSpeed(ac_fujitsu.convertFan((stdAc::fanspeed_t)last_command.fanspeed));
+        if (last_command.swingh && last_command.swingv)
+            ac_fujitsu.setSwing(kFujitsuAcSwingBoth);
+        else if (last_command.swingh)
+            ac_fujitsu.setSwing(kFujitsuAcSwingHoriz);
+        else if (last_command.swingv)
+            ac_fujitsu.setSwing(kFujitsuAcSwingVert);
+        else
+            ac_fujitsu.setSwing(kFujitsuAcSwingOff);
+        ac_fujitsu.setOnTimer(last_command.ontimer * 60);
+        ac_fujitsu.setOffTimer(last_command.offtimer * 60);
+        ac_fujitsu.send();
+        break;
     }
     // Restore original task priority
     vTaskPrioritySet(NULL, prev_priority);
@@ -613,6 +658,10 @@ const char *get_protocol_string(int16_t protocol)
         return RAW_IR_PROTOCOL;
     case VOLTAS:
         return VOLTAS_IR_PROTOCOL;
+    case COOLIX:
+        return COOLIX_IR_PROTOCOL;
+    case FUJITSU_AC:
+        return FUJITSU_AC_IR_PROTOCOL;
     case UNKNOWN:
         return UNKNOWN_IR_PROTOCOL;
     case UNUSED:
@@ -661,6 +710,8 @@ bool is_sendable_protocol(decode_type_t protocol)
     case SAMSUNG_AC:
     case TOSHIBA_AC:
     case VOLTAS:
+    case COOLIX:
+    case FUJITSU_AC:
         return true;
     default:
         return false;
@@ -715,6 +766,8 @@ bool is_decodeable_protocol(decode_type_t protocol)
     case SAMSUNG36:
     case TOSHIBA_AC:
     case VOLTAS:
+    case COOLIX:
+    case FUJITSU_AC:
         return true;
     default:
         return false;
@@ -800,6 +853,16 @@ bool isFetchControlInfoSuccessful(const char *description)
     {
         snprintf(ac_manual_control_t.temperature, sizeof(ac_manual_control_t.temperature), (strstr(description, "Temp") + 6));
         ac_manual_control_t.temperature_value = atoi(ac_manual_control_t.temperature);
+        // Populate currACState fields from last_command
+        ac_manual_control_t.swingh = last_command.swingh;
+        ac_manual_control_t.swingv = last_command.swingv;
+        ac_manual_control_t.ontimer = last_command.ontimer;
+        ac_manual_control_t.offtimer = last_command.offtimer;
+        ac_manual_control_t.locking = last_command.locking;
+        ac_manual_control_t.upperTemperatureLimit = last_command.upperTemperatureLimit;
+        ac_manual_control_t.lowerTemperatureLimit = last_command.lowerTemperatureLimit;
+        ac_manual_control_t.ambientTemperatureAnalog = read_analog_temperature_sensor();
+        ac_manual_control_t.ambientTemperatureDigital = read_digital_temperature_sensor();
         return true;
     }
     else
@@ -1091,6 +1154,18 @@ void perform_teaching_process_without_error_checking()
     teaching_mode_t.remainingCommands = get_remaining_teaching_mode_cmds_count();
     teaching_mode_t.errorCode = SUCCESS;
     
+    // ADD THIS HERE — after remainingCommands is updated:
+    ESP_LOGW(IR_TAG, "Stored slot [%d] | remainingCommands=%d | recvd_array=[%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d]",
+        teaching_mode_t.power ? teaching_mode_t.commandIndex : 0,
+        teaching_mode_t.remainingCommands,
+        teaching_mode_cmd_recvd_array[0],  teaching_mode_cmd_recvd_array[1],
+        teaching_mode_cmd_recvd_array[2],  teaching_mode_cmd_recvd_array[3],
+        teaching_mode_cmd_recvd_array[4],  teaching_mode_cmd_recvd_array[5],
+        teaching_mode_cmd_recvd_array[6],  teaching_mode_cmd_recvd_array[7],
+        teaching_mode_cmd_recvd_array[8],  teaching_mode_cmd_recvd_array[9],
+        teaching_mode_cmd_recvd_array[10], teaching_mode_cmd_recvd_array[11],
+        teaching_mode_cmd_recvd_array[12], teaching_mode_cmd_recvd_array[13]);
+        
     if (teaching_mode_t.remainingCommands != 0)
 #if (IS_GWY)
         generate_ack(GWY_TEACHING_MODE, NULL);

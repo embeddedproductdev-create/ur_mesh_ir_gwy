@@ -627,13 +627,17 @@ void handle_ble_incoming(esp_ble_mesh_model_cb_param_t *param)
 
     manual_control *manual_control_ack = (manual_control *)param->model_operation.msg;
     if(manual_control_ack->packetid == NODE_MANUAL_AC_CONTROL_ACK) {
+        manual_control_ack->rssi = rssi;
         generate_node_manual_ac_control_ack(manual_control_ack);
         return;
     }
 
     CommandStruct *ack = (CommandStruct *)param->model_operation.msg;
     ack->rssi = rssi;
-    generate_ack(ack->packetid, ack);
+    if (ack->packetid == NODE_AC_CONTROL_PACKET)
+        generate_ack(NODE_AC_CONTROL_ACK, ack);
+    else
+        generate_ack(ack->packetid, ack);
     if(ack->packetid == NODE_UNPROV_PACKET) {
         esp_err_t err = esp_ble_mesh_provisioner_delete_node_with_addr(ack->elemaddr);
         if(err) ESP_LOGE(BLE_TAG, "Failed to remove Node(elemAddr:%d) from database - %s",ack->elemaddr, esp_err_to_name(err));
