@@ -784,6 +784,7 @@ bool is_decodeable_protocol(decode_type_t protocol)
  */
 bool isFetchControlInfoSuccessful(const char *description)
 {
+    ESP_LOGW(IR_TAG, "isFetchControlInfoSuccessful: description='%s'", description);
     /*Initializing to Defaults*/
     strcpy(ac_manual_control_t.temperature, "");
     strcpy(ac_manual_control_t.power, "");
@@ -875,35 +876,97 @@ bool isFetchControlInfoSuccessful(const char *description)
 
 /**
  * @brief Function that performs the AC locking feature
+ *
+ * Changes made:
+ * Issue 1 - Power OFF: Locking only triggers when Power=ON.
+ *            If user presses Power OFF, always accept — never override.
+ * Issue 2 - Fan Mode: Locking never triggers when mode is Fan.
+ *            Checked both detected mode from remote and last cloud-set mode.
+ * Issue 3 - Temperature not in IR description: If isFetchControlInfoSuccessful()
+ *            returns false (e.g. Fujitsu Power OFF command has no temp in description),
+ *            skip locking entirely and still send ACK to cloud.
+ * Issue 4 - mode_num not updated: When user changes mode via physical remote,
+ *            last_command.mode_num is now updated alongside mode_str so NVS
+ *            stays consistent after reboot.
+ * Issue 6 - Power OFF during override: When locking correction fires ir_transmit(),
+ *            last_command.power is forced to 1 (ON) so the AC actually turns on
+ *            at the locked temperature instead of receiving a Power OFF command.
  */
 void locking_feature(const char *description)
 {
-    if (isFetchControlInfoSuccessful(description))
+    // Debug log — print all values before locking decision
+    ESP_LOGW(IR_TAG, "locking_feature called: locking=%d power_val=%d mode=%s temp_val=%d limits=[%d-%d]",
+        last_command.locking,
+        ac_manual_control_t.power_value,
+        ac_manual_control_t.mode,
+        ac_manual_control_t.temperature_value,
+        last_command.lowerTemperatureLimit,
+        last_command.upperTemperatureLimit);
+
+    // Issue 3 — If temperature could not be parsed from IR signal,
+    // skip locking check entirely and fall through to ACK
+    if (!isFetchControlInfoSuccessful(description))
     {
-        if (last_command.locking && !(ac_manual_control_t.temperature_value >= last_command.lowerTemperatureLimit &&
-                                      ac_manual_control_t.temperature_value <= last_command.upperTemperatureLimit))
+        ESP_LOGW(IR_TAG, "Locking feature: temperature not in IR description — skipping locking check");
+    }
+    else
+    {
+        if (last_command.locking &&                                         // Locking must be enabled by cloud
+            ac_manual_control_t.power_value == 1 &&                        // Issue 1: Only lock when Power=ON
+            strcasecmp(ac_manual_control_t.mode, FAN_MODE_STR) != 0 &&     // Issue 2: Skip lock if remote pressed Fan mode
+            strcasecmp(last_command.mode_str, FAN_MODE_STR) != 0 &&        // Issue 2: Skip lock if last cloud command was Fan mode
+            !(ac_manual_control_t.temperature_value >= last_command.lowerTemperatureLimit &&
+              ac_manual_control_t.temperature_value <= last_command.upperTemperatureLimit)) // Temperature outside locked range
         {
             ESP_LOGW(IR_TAG, "AC temperature limit exceeded  (Current set Temperature : %d) | (Limits %d - %d)",
                      ac_manual_control_t.temperature_value,
                      last_command.lowerTemperatureLimit,
                      last_command.upperTemperatureLimit);
+
+            // Clamp to nearest limit boundary
+            // If below lower limit → set to lower limit
+            // If above upper limit → set to upper limit
+            if (ac_manual_control_t.temperature_value < last_command.lowerTemperatureLimit)
+            {
+                ESP_LOGW(IR_TAG, "Temp %d below lower limit %d — clamping to lower limit",
+                    ac_manual_control_t.temperature_value, last_command.lowerTemperatureLimit);
+                last_command.temperature = last_command.lowerTemperatureLimit;
+            }
+            else if (ac_manual_control_t.temperature_value > last_command.upperTemperatureLimit)
+            {
+                ESP_LOGW(IR_TAG, "Temp %d above upper limit %d — clamping to upper limit",
+                    ac_manual_control_t.temperature_value, last_command.upperTemperatureLimit);
+                last_command.temperature = last_command.upperTemperatureLimit;
+            }
+
             ESP_LOGW(IR_TAG, "Setting AC Temperature to : %d", last_command.temperature);
+            last_command.power = 1;    // Issue 6: Force Power ON so AC turns on at locked temp
             ir_transmit();
         }
         else
         {
+            // Locking not triggered — accept what user pressed and update last_command
             last_command.power = ac_manual_control_t.power_value;
             last_command.temperature = ac_manual_control_t.temperature_value;
             last_command.fanspeed = ac_manual_control_t.fanspeed_value;
             strcpy(last_command.mode_str, ac_manual_control_t.mode);
+            // Issue 4: Update mode_num alongside mode_str for NVS consistency after reboot
+            if      (strcasecmp(ac_manual_control_t.mode, "Cool") == 0) last_command.mode_num = 1;
+            else if (strcasecmp(ac_manual_control_t.mode, "Hot")  == 0) last_command.mode_num = 2;
+            else if (strcasecmp(ac_manual_control_t.mode, "Auto") == 0) last_command.mode_num = 0;
+            else if (strcasecmp(ac_manual_control_t.mode, "Dry")  == 0) last_command.mode_num = 3;
+            else if (strcasecmp(ac_manual_control_t.mode, "Fan")  == 0) last_command.mode_num = 4;
             set_blob_in_nvs_flash(IR_HANDLE, NVS_LAST_COMMAND_KEY, &last_command, sizeof(CommandStruct));
         }
     }
+
 #if (IS_GWY)
+    // Gateway: publish manual AC control ACK directly to MQTT
     generate_ack(GWY_MANUAL_AC_CONTROL_ACK, NULL);
 #endif
 
 #if (!IS_GWY)
+    // Node: send manual AC control ACK to provisioner over BLE Mesh
     send_manual_control_ack_to_provisioner();
 #endif
 }
