@@ -13,6 +13,9 @@
 #define GENERAL_NVS_NAMESPACE "GENERAL"
 #define SERIALNUM_NVS_NAMESPACE "serial"
 
+#define GROUP_NVS_PARTITION_NAME  "group"
+#define GROUP_NVS_NAMESPACE       "GROUP"
+
 /*Global Variables*/
 extern nvs_handle_t ir_nvs_handle;
 extern nvs_handle_t general_nvs_handle;
@@ -46,6 +49,7 @@ typedef enum
 {
     IR_HANDLE,
     GENERAL_HANDLE,
+    GROUP_HANDLE,
 }handle_enum_t;
 
 /*Function declarations*/

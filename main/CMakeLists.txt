@@ -11,6 +11,7 @@ set(CUSTOM_SRCS
     src/ble_prov_new.c
     src/ble_node_new.c
     src/temperature_sensor.c
+    src/group_table.c
 )
 
 set(includeDirs inc)

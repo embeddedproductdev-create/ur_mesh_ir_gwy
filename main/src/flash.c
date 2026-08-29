@@ -7,18 +7,21 @@
 #include "nvs.h"
 #include "esp_log.h"
 
+
 #include <main.h>
 #include <lte.h>
 #include <flash.h>
 #include <ir.h>
 #include <led.h>
 #include <ble_new.h>
+#include <group_table.h>
 
 #define NVS_TAG "NVS"
 
 nvs_handle_t ir_nvs_handle;
 nvs_handle_t general_nvs_handle;
 nvs_handle_t serial_num_nvs_handle;
+nvs_handle_t group_nvs_handle; 
 
 /**
  * @warning The keys below are used by nvs. They should not be more than 15 chars
@@ -83,6 +86,13 @@ error_codes factory_reset_device()
         ESP_LOGE(NVS_TAG, "Erasing IR NVS partition failed : %s", esp_err_to_name(err));
         goto here;
     }
+    err = nvs_flash_erase_partition(GROUP_NVS_PARTITION_NAME);
+    if (err)
+    {
+        ESP_LOGE(NVS_TAG, "Erasing Group NVS partition failed : %s", esp_err_to_name(err));
+        goto here;
+    }
+
     err = nvs_flash_erase(); // Clears off the BLE Partition
     if (err)
     {
@@ -90,6 +100,7 @@ error_codes factory_reset_device()
         goto here;
     }
     else ESP_LOGW(NVS_TAG, "Flash data erased succuessfully");
+
 
     here:
     if(err) {
@@ -141,6 +152,9 @@ void set_number_in_nvs_flash(handle_enum_t nvshandle, const char *key, int value
         break;
     case GENERAL_HANDLE:
         handle = general_nvs_handle;
+        break;
+    case GROUP_HANDLE:
+        handle = group_nvs_handle;
         break;
     default:
         return;
@@ -210,6 +224,9 @@ void set_str_in_nvs_flash(handle_enum_t nvshandle, const char *key, char *value)
     case GENERAL_HANDLE:
         handle = general_nvs_handle;
         break;
+    case GROUP_HANDLE:
+        handle = group_nvs_handle;
+        break;
     default:
         return;
     }
@@ -237,6 +254,9 @@ void set_blob_in_nvs_flash(handle_enum_t nvshandle, const char *key, const void 
         break;
     case GENERAL_HANDLE:
         handle = general_nvs_handle;
+        break;
+    case GROUP_HANDLE:
+        handle = group_nvs_handle;
         break;
     default:
         return;
@@ -314,6 +334,9 @@ void get_blob_from_nvs_flash(handle_enum_t nvshandle, const char *key, void *out
         break;
     case GENERAL_HANDLE:
         handle = general_nvs_handle;
+        break;
+    case GROUP_HANDLE:
+        handle = group_nvs_handle;
         break;
     default:
         return;
@@ -465,6 +488,21 @@ void nvs_init()
         err = nvs_flash_init_partition(SERIALNUM_NVS_PARTITION_NAME);
     }
 
+    // Group subscription partition — gateway only
+    err = nvs_flash_init_partition(GROUP_NVS_PARTITION_NAME);
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase_partition(GROUP_NVS_PARTITION_NAME));
+        err = nvs_flash_init_partition(GROUP_NVS_PARTITION_NAME);
+    }
+    if (err) ESP_LOGE(NVS_TAG, "Failed to init %s partition - %s",
+        GROUP_NVS_PARTITION_NAME, esp_err_to_name(err));
+
+    err = nvs_open_from_partition(GROUP_NVS_PARTITION_NAME, GROUP_NVS_NAMESPACE,
+        NVS_READWRITE, &group_nvs_handle);
+    if (err) ESP_LOGE(NVS_TAG, "Opening %s Partition failed : %s",
+        GROUP_NVS_PARTITION_NAME, esp_err_to_name(err));
+
     //Open the partitions to get their handles
     err = nvs_open_from_partition(IR_NVS_PARTITION_NAME, IR_NVS_NAMESPACE, NVS_READWRITE, &ir_nvs_handle);
     if(err) {
@@ -486,6 +524,8 @@ void nvs_init()
         ESP_LOGW(NVS_TAG, "Defaulting data in NVS flash : %s", esp_err_to_name(init_data_in_nvs()));
     pull_data_from_nvs();
 
+    group_table_load();
+
     // Example of nvs_get_stats() to get overview of actual statistics of data entries :
     nvs_stats_t nvs_stats;
 
@@ -501,5 +541,11 @@ void nvs_init()
     ESP_LOGI(NVS_TAG, "UsedEntries : (%d)", nvs_stats.used_entries);
     ESP_LOGI(NVS_TAG, "FreeEntries : (%d)", nvs_stats.free_entries);
     // ESP_LOGI(NVS_TAG, "AvailableEntries : (%lu)", nvs_stats.available_entries);
+    ESP_LOGI(NVS_TAG, "AllEntries : (%d)", nvs_stats.total_entries);
+
+    nvs_get_stats(GROUP_NVS_PARTITION_NAME, &nvs_stats);
+    ESP_LOGI(NVS_TAG, "=-=-=-=-=-=-=-=-=-=- GROUP_PARTITION_STATS -=-=-=-=-=-=-=-=-=-=");
+    ESP_LOGI(NVS_TAG, "UsedEntries : (%d)", nvs_stats.used_entries);
+    ESP_LOGI(NVS_TAG, "FreeEntries : (%d)", nvs_stats.free_entries);
     ESP_LOGI(NVS_TAG, "AllEntries : (%d)", nvs_stats.total_entries);
 }
