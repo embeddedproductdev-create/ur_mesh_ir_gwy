@@ -131,6 +131,59 @@ static esp_ble_mesh_prov_t provision = {
     .prov_start_address = 0x0005,
 };
 
+/*===========================================================
++ * Node type table — struct typedef and function declarations live in
++ * ble_new.h. Purely gateway-local storage: lets generate_ack() add
++ * "NodeType" to the NODE_PROV_PACKET ack without needing a wire-struct
++ * change to CommandStruct, which every node type (including existing
++ * IR-AC nodes) already shares.
++ *===========================================================*/
+#define DEV_UUID_NODE_TYPE_OFFSET  8   /* uuid[0:1]=prefix, [2:7]=MAC, [8]=node type */
+
+static node_type_entry_t node_type_table[MAX_NODES_PER_GROUP];
+
+void node_type_table_set(uint16_t elemaddr, uint8_t node_type)
+{
+    for (int i = 0; i < MAX_NODES_PER_GROUP; i++)
+    {
+        if (node_type_table[i].valid && node_type_table[i].elemaddr == elemaddr)
+        {
+            node_type_table[i].node_type = node_type;   // re-provisioned — refresh
+            return;
+        }
+    }
+    for (int i = 0; i < MAX_NODES_PER_GROUP; i++)
+    {
+        if (!node_type_table[i].valid)
+        {
+            node_type_table[i] = (node_type_entry_t){ .elemaddr = elemaddr, .node_type = node_type, .valid = true };
+            return;
+        }
+    }
+    ESP_LOGW(BLE_TAG, "node_type_table full — can't track node_type for elemaddr=0x%04x", elemaddr);
+}
+
+/** Called on NODE_UNPROV_PACKET so a freed elemaddr doesn't keep a stale node_type around. */
+void node_type_table_clear(uint16_t elemaddr)
+{
+    for (int i = 0; i < MAX_NODES_PER_GROUP; i++)
+    {
+        if (node_type_table[i].valid && node_type_table[i].elemaddr == elemaddr)
+        {
+            node_type_table[i].valid = false;
+            return;
+        }
+    }
+}
+
+uint8_t get_node_type_for_elemaddr(uint16_t elemaddr)
+{
+    for (int i = 0; i < MAX_NODES_PER_GROUP; i++)
+        if (node_type_table[i].valid && node_type_table[i].elemaddr == elemaddr)
+            return node_type_table[i].node_type;
+    return 0;   /* unknown */
+}
+
 static void mesh_example_info_store(void)
 {
     ble_mesh_nvs_store(NVS_HANDLE, NVS_KEY, &store, sizeof(store));
@@ -178,6 +231,7 @@ static esp_err_t prov_complete(uint16_t node_index, const esp_ble_mesh_octet16_t
     ESP_LOGI(BLE_TAG, "node_index %u, primary_addr 0x%04x, element_num %u, net_idx 0x%03x",
         node_index, primary_addr, element_num, net_idx);
     ESP_LOG_BUFFER_HEX("uuid", uuid, ESP_BLE_MESH_OCTET16_LEN);
+    node_type_table_set(primary_addr, uuid[DEV_UUID_NODE_TYPE_OFFSET]); // Decide node type from dev_uuid[8] and store in gateway-local table for future NODE_PROV_PACKET acks
 
     store.server_addr = primary_addr;
     mesh_example_info_store(); /* Store proper mesh example info */
@@ -698,6 +752,7 @@ void handle_ble_incoming(esp_ble_mesh_model_cb_param_t *param)
     if(ack->packetid == NODE_UNPROV_PACKET) {
         esp_err_t err = esp_ble_mesh_provisioner_delete_node_with_addr(ack->elemaddr);
         if(err) ESP_LOGE(BLE_TAG, "Failed to remove Node(elemAddr:%d) from database - %s",ack->elemaddr, esp_err_to_name(err));
+        node_type_table_clear(ack->elemaddr);
     }
     if(ack->msgseqno != BUTTON_PRESS_MSGSEQNO) 
         removeQueueItemByMsgSeqNo(command_queue, ack->msgseqno);
@@ -854,6 +909,33 @@ void send_cmd_to_node(CommandStruct *cmd)
         return;
     }
     esp_ble_mesh_client_model_send_msg(&vnd_models[0], &ctx, ESP_BLE_MESH_VND_MODEL_OP_SEND, sizeof(CommandStruct), (uint8_t *)cmd, 10, true, ROLE_PROVISIONER);
+}
+
+/**
+ * @brief Generic BLE Mesh sender for RS485 relay structs — see ble_new.h.
+ *        Does not use command_queue (unlike send_cmd_to_node): that queue's
+ *        items are sized for CommandStruct, which these structs don't fit.
+ *        In-flight tracking (for ACK enrichment and timeout) is rs485_relay.c's
+ *        own pending-command tracker, keyed by msgseqno — not command_queue.
+ */
+void send_rs485_struct_to_node(uint16_t elemaddr, const void *payload, size_t payload_len)
+{
+    esp_ble_mesh_msg_ctx_t ctx = {
+        .addr = elemaddr,
+        .app_idx = prov_key.app_idx,
+        .net_idx = prov_key.net_idx,
+        .send_ttl = MSG_SEND_TTL,
+        .send_rel = MSG_SEND_REL,
+    };
+
+    esp_err_t err = esp_ble_mesh_client_model_send_msg(
+        &vnd_models[0], &ctx, ESP_BLE_MESH_VND_MODEL_OP_SEND,
+        payload_len, (uint8_t *)payload,
+        10, true, ROLE_PROVISIONER);
+
+    if (err != ESP_OK)
+        ESP_LOGE(BLE_TAG, "send_rs485_struct_to_node failed: %s (elemaddr=0x%04x, len=%u)",
+            esp_err_to_name(err), elemaddr, (unsigned)payload_len);
 }
 
 #endif

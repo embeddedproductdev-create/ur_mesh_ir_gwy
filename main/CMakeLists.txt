@@ -12,6 +12,7 @@ set(CUSTOM_SRCS
     src/ble_node_new.c
     src/temperature_sensor.c
     src/group_table.c
+    src/rs485_relay.c
 )
 
 set(includeDirs inc)

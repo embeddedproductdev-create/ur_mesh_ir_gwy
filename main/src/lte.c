@@ -20,6 +20,7 @@
 #include <ble_new.h>
 #include <temperature_sensor.h>
 #include <group_table.h>
+#include <rs485_relay.h>
 
 char LTE_UART_data[UART_BUFFER_LEN];
 
@@ -2189,6 +2190,7 @@ void maintainMQTTConnection()
         maintainCommandQueue();
         publish_from_queue();
         group_tracker_check_timeouts();   
+        rs485_relay_check_timeouts();
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
