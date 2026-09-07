@@ -25,20 +25,19 @@
 #include "esp_ble_mesh_networking_api.h"
 #include "esp_ble_mesh_config_model_api.h"
 #include "ble_mesh_example_nvs.h"
+#include "esp_ble_mesh_local_data_operation_api.h"   // ← ADD for model subscribe/unsubscribe
 
 #include <flash.h>
 #include <ble_new.h>
 #include <lte.h>
 #include <led.h>
+#include "group_table.h"
 
 bool ble_initialized = false;
 
 #define BLE_TAG "BLE"
 
 #define CID_ESP             0x02E5
-
-#define PROV_OWN_ADDR       0x0001
-
 #define MSG_SEND_TTL        3
 #define MSG_SEND_REL        false
 #define MSG_TIMEOUT         0
@@ -634,6 +633,64 @@ void handle_ble_incoming(esp_ble_mesh_model_cb_param_t *param)
 
     CommandStruct *ack = (CommandStruct *)param->model_operation.msg;
     ack->rssi = rssi;
+    ESP_LOGI(BLE_TAG, "Incoming BLE Msg: packetid=0x%04x, elemaddr=0x%04x, groupaddr=0x%04x, msgseqno=%d, errorcode=%d",
+        ack->packetid, ack->elemaddr, ack->groupaddr, ack->msgseqno, ack->errorcode);
+    if (ack->packetid == NODE_GROUP_SUB_ACK)
+    {
+        ESP_LOGI(BLE_TAG, "Node 0x%04x group subscribe ACK — group 0x%04x err=%d",
+            ack->elemaddr, ack->groupaddr, ack->errorcode);
+        if (ack->errorcode == SUCCESS)
+        {
+            group_table_subscribe(ack->groupaddr, ack->elemaddr);
+            ESP_LOGI(BLE_TAG, "Group 0x%04x now has %d members",
+                ack->groupaddr, group_table_get_count(ack->groupaddr));
+        }
+        generate_ack(NODE_GROUP_SUB_ACK, ack);
+        if (ack->msgseqno != BUTTON_PRESS_MSGSEQNO)
+            removeQueueItemByMsgSeqNo(command_queue, ack->msgseqno);
+        return;
+    }
+
+    // ADD: Handle node group unsubscribe ACK
+    if (ack->packetid == NODE_GROUP_UNSUB_ACK)
+    {
+        ESP_LOGI(BLE_TAG, "Node 0x%04x group unsubscribe ACK — group 0x%04x err=%d",
+            ack->elemaddr, ack->groupaddr, ack->errorcode);
+        if (ack->errorcode == SUCCESS)
+        {
+            group_table_unsubscribe(ack->groupaddr, ack->elemaddr);
+            ESP_LOGI(BLE_TAG, "Group 0x%04x now has %d members",
+                ack->groupaddr, group_table_get_count(ack->groupaddr));
+        }
+        generate_ack(NODE_GROUP_UNSUB_ACK, ack);
+        if (ack->msgseqno != BUTTON_PRESS_MSGSEQNO)
+            removeQueueItemByMsgSeqNo(command_queue, ack->msgseqno);
+        return;
+    }
+
+    // ADD: Handle node group AC control ACK — update tracker
+    if (ack->packetid == NODE_GROUP_AC_CONTROL_PACKET)
+    {
+        ESP_LOGI(BLE_TAG, "Node 0x%04x group AC ACK — seq=%d group=0x%04x err=%d",
+            ack->elemaddr, ack->group_cmd_seq, ack->groupaddr, ack->errorcode);
+
+        GroupAckTracker_t *tracker = group_tracker_find_by_seq(ack->group_cmd_seq);
+        if (tracker == NULL)
+        {
+            ESP_LOGW(BLE_TAG, "No active tracker for seq=%d — stale ACK ignored",
+                ack->group_cmd_seq);
+            return;
+        }
+
+        bool all_done = group_tracker_record_ack(tracker, ack->elemaddr, ack->errorcode);
+        if (all_done)
+        {
+            generate_ack(NODE_GROUP_AC_CONTROL_SUMMARY_ACK, &tracker->cmd);
+            group_tracker_free(tracker);   // free after ACK enqueued
+        }
+        return;
+    }
+
     if (ack->packetid == NODE_AC_CONTROL_PACKET)
         generate_ack(NODE_AC_CONTROL_ACK, ack);
     else
@@ -642,7 +699,91 @@ void handle_ble_incoming(esp_ble_mesh_model_cb_param_t *param)
         esp_err_t err = esp_ble_mesh_provisioner_delete_node_with_addr(ack->elemaddr);
         if(err) ESP_LOGE(BLE_TAG, "Failed to remove Node(elemAddr:%d) from database - %s",ack->elemaddr, esp_err_to_name(err));
     }
-    if(ack->msgseqno != BUTTON_PRESS_MSGSEQNO) removeQueueItemByMsgSeqNo(command_queue, ack->msgseqno);
+    if(ack->msgseqno != BUTTON_PRESS_MSGSEQNO) 
+        removeQueueItemByMsgSeqNo(command_queue, ack->msgseqno);
+}
+
+void handle_gwy_group_subscribe(CommandStruct *cmd)
+{
+    ESP_LOGW(LTE_TAG, "GWY subscribing itself to group 0x%04x", cmd->groupaddr);
+
+    // Gateway subscribes its own vendor CLIENT model to the group address
+    esp_err_t err = esp_ble_mesh_model_subscribe_group_addr(
+        PROV_OWN_ADDR,                      // gateway primary element address
+        CID_ESP,
+        ESP_BLE_MESH_VND_MODEL_ID_CLIENT,   // gateway uses vendor CLIENT model
+        cmd->groupaddr
+    );
+
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(LTE_TAG, "GWY group subscribe failed: %s", esp_err_to_name(err));
+        cmd->errorcode = FAILURE;
+    }
+    else
+    {
+        ESP_LOGI(LTE_TAG, "GWY subscribed to group 0x%04x", cmd->groupaddr);
+        group_table_subscribe(cmd->groupaddr, PROV_OWN_ADDR);
+        cmd->errorcode = SUCCESS;
+    }
+    generate_ack(GWY_GROUP_SUB_ACK, cmd);
+}
+
+void handle_gwy_group_unsubscribe(CommandStruct *cmd)
+{
+    ESP_LOGW(LTE_TAG, "GWY unsubscribing itself from group 0x%04x", cmd->groupaddr);
+
+    esp_err_t err = esp_ble_mesh_model_unsubscribe_group_addr(
+        PROV_OWN_ADDR,
+        CID_ESP,
+        ESP_BLE_MESH_VND_MODEL_ID_CLIENT,
+        cmd->groupaddr
+    );
+
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(LTE_TAG, "GWY group unsubscribe failed: %s", esp_err_to_name(err));
+        cmd->errorcode = FAILURE;
+    }
+    else
+    {
+        ESP_LOGI(LTE_TAG, "GWY unsubscribed from group 0x%04x", cmd->groupaddr);
+        group_table_unsubscribe(cmd->groupaddr, PROV_OWN_ADDR);
+        cmd->errorcode = SUCCESS;
+    }
+    generate_ack(GWY_GROUP_UNSUB_ACK, cmd);
+}
+
+/**
+ * @brief Send group AC control command to all nodes subscribed to group address
+ *        Uses unacknowledged vendor model message to the group address
+ *        All subscribed nodes receive and execute simultaneously
+ * @param cmd  CommandStruct with groupaddr and AC control fields populated
+ */
+void ble_send_group_ac_control(CommandStruct *cmd)
+{
+    esp_ble_mesh_msg_ctx_t ctx = {
+        .addr     = cmd->groupaddr,      // GROUP address — not unicast
+        .app_idx  = prov_key.app_idx,
+        .net_idx  = prov_key.net_idx,
+        .send_ttl = MSG_SEND_TTL,
+        .send_rel = MSG_SEND_REL,
+    };
+
+    cmd->packetid = NODE_GROUP_AC_CONTROL_PACKET;
+
+    ESP_LOGW(BLE_TAG, "Sending group AC control to 0x%04x (%d nodes)",
+        cmd->groupaddr, group_table_get_count(cmd->groupaddr));
+
+    esp_err_t err = esp_ble_mesh_client_model_send_msg(
+        &vnd_models[0], &ctx,
+        ESP_BLE_MESH_VND_MODEL_OP_SEND,
+        sizeof(CommandStruct), (uint8_t *)cmd,
+        MSG_TIMEOUT, false,              // unacknowledged — group msgs cannot be acked in BLE Mesh spec
+        ROLE_PROVISIONER);
+
+    if (err != ESP_OK)
+        ESP_LOGE(BLE_TAG, "Failed to send group AC control: %s", esp_err_to_name(err));
 }
 
 /**
@@ -686,6 +827,16 @@ void send_cmd_to_node(CommandStruct *cmd)
         
         case NODE_DEBUG_INFO_PACKET:
             ESP_LOGI(BLE_TAG, "Sending Node Debug Info packet");
+            break;
+
+        case NODE_GROUP_SUB_PACKET:
+            ESP_LOGI(BLE_TAG, "Sending Group Subscribe to node 0x%04x for group 0x%04x",
+                cmd->elemaddr, cmd->groupaddr);
+            break;
+
+        case NODE_GROUP_UNSUB_PACKET:
+            ESP_LOGI(BLE_TAG, "Sending Group Unsubscribe to node 0x%04x for group 0x%04x",
+                cmd->elemaddr, cmd->groupaddr);
             break;
 
         default:

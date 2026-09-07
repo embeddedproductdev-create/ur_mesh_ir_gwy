@@ -7,6 +7,7 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 
@@ -28,6 +29,7 @@ TaskHandle_t button_task_handle = NULL;
 TaskHandle_t lte_task_handle = NULL;
 TaskHandle_t ir_recv_task_handle = NULL;
 TaskHandle_t health_monitor_task_handle = NULL;
+static TimerHandle_t health_monitor_timer = NULL;
 
 /*Global Flags/Variables Initialization*/
 uint8_t newDevice = 1;
@@ -47,6 +49,8 @@ char device_location_str[LOCATION_STR_LEN];
 uint16_t teaching_mode_raw_len = 0;
 
 uint16_t teachingModeIrCmds[MAX_CMDS_IN_TEACHING_MODE][TEACHING_MODE_CDM_LEN];
+
+
 
 /**
  * @brief Function that prints basic information about the device after fetching info from nvs flash
@@ -116,42 +120,25 @@ void construct_topics_and_msgs()
 #define HEALTH_MONITOR_INTERVAL_MS  (5 * 60 * 1000)  // 5 minutes
 #define HEALTH_TAG "HEALTH"
 
-void health_monitor_task(void *pvParameters)
+static void health_monitor_callback(TimerHandle_t xTimer)
 {
-    while (1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(HEALTH_MONITOR_INTERVAL_MS));
-
-        ESP_LOGW(HEALTH_TAG, "========== HEALTH CHECK ==========");
-
-        // Heap status
-        ESP_LOGW(HEALTH_TAG, "Free heap        : %" PRIu32 " bytes", esp_get_free_heap_size());
-        ESP_LOGW(HEALTH_TAG, "Min free heap    : %" PRIu32 " bytes", esp_get_minimum_free_heap_size());
-
-        // Queue states
-        ESP_LOGW(HEALTH_TAG, "Publish queue    : %d / %d items", 
-            uxQueueMessagesWaiting(publish_queue), PUBLISH_QUEUE_SIZE);
-        ESP_LOGW(HEALTH_TAG, "Command queue    : %d / %d items",
-            uxQueueMessagesWaiting(command_queue), COMMAND_QUEUE_SIZE);
-
-        // Task stack high water marks (minimum free stack words remaining)
-        // If this approaches 0, stack overflow is imminent
-        ESP_LOGW(HEALTH_TAG, "LTE task HWM     : %d words", 
-            uxTaskGetStackHighWaterMark(lte_task_handle));
-        ESP_LOGW(HEALTH_TAG, "IR task HWM      : %d words",
-            uxTaskGetStackHighWaterMark(ir_recv_task_handle));
-        ESP_LOGW(HEALTH_TAG, "Button task HWM  : %d words",
-            uxTaskGetStackHighWaterMark(button_task_handle));
-        ESP_LOGW(HEALTH_TAG, "Health task HWM  : %d words",
-            uxTaskGetStackHighWaterMark(health_monitor_task_handle));
-
-        // MQTT connection state
-        ESP_LOGW(HEALTH_TAG, "MQTT connected   : %d", mqtt_connected);
-        ESP_LOGW(HEALTH_TAG, "Uptime           : %" PRIu32 " seconds", 
-            (uint32_t)(esp_timer_get_time() / 1000000));
-
-        ESP_LOGW(HEALTH_TAG, "==================================");
-    }
+    ESP_LOGW(HEALTH_TAG, "========== HEALTH CHECK ==========");
+    ESP_LOGW(HEALTH_TAG, "Free heap        : %" PRIu32 " bytes", esp_get_free_heap_size());
+    ESP_LOGW(HEALTH_TAG, "Min free heap    : %" PRIu32 " bytes", esp_get_minimum_free_heap_size());
+    ESP_LOGW(HEALTH_TAG, "Publish queue    : %d / %d items",
+        uxQueueMessagesWaiting(publish_queue), PUBLISH_QUEUE_SIZE);
+    ESP_LOGW(HEALTH_TAG, "Command queue    : %d / %d items",
+        uxQueueMessagesWaiting(command_queue), COMMAND_QUEUE_SIZE);
+    ESP_LOGW(HEALTH_TAG, "LTE task HWM     : %d words",
+        uxTaskGetStackHighWaterMark(lte_task_handle));
+    ESP_LOGW(HEALTH_TAG, "IR task HWM      : %d words",
+        uxTaskGetStackHighWaterMark(ir_recv_task_handle));
+    ESP_LOGW(HEALTH_TAG, "Button task HWM  : %d words",
+        uxTaskGetStackHighWaterMark(button_task_handle));
+    ESP_LOGW(HEALTH_TAG, "MQTT connected   : %d", mqtt_connected);
+    ESP_LOGW(HEALTH_TAG, "Uptime           : %" PRIu64 " seconds",
+        (uint64_t)(esp_timer_get_time() / 1000000));
+    ESP_LOGW(HEALTH_TAG, "==================================");
 }
 #endif
 
@@ -178,7 +165,16 @@ void app_main(void)
 
 #if (IS_GWY)
     xTaskCreate(lte_task, "LTE Task", LTE_THREAD_STACK_SIZE, NULL, 2, &lte_task_handle);
-    xTaskCreate(health_monitor_task, "Health Monitor", 4096, NULL, 1, &health_monitor_task_handle);
+    health_monitor_timer = xTimerCreate(
+    "HealthMonitor",                    // timer name
+    pdMS_TO_TICKS(60000),               // 1 minute period
+    pdTRUE,                             // auto-reload = repeating
+    NULL,                               // timer ID not used
+    (void*)health_monitor_callback);           // callback function
+if (health_monitor_timer != NULL)
+    xTimerStart(health_monitor_timer, 0);
+else
+    ESP_LOGE(TAG, "Failed to create health monitor timer");
 #endif
     if(registered || provisioned) xTaskCreate(ir_recv_task, "IR Recv Task", IR_THREAD_STACK_SIZE, NULL, 2, &ir_recv_task_handle);
 }

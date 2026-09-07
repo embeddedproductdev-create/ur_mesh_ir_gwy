@@ -19,6 +19,7 @@
 #include <ir.h>
 #include <ble_new.h>
 #include <temperature_sensor.h>
+#include <group_table.h>
 
 char LTE_UART_data[UART_BUFFER_LEN];
 
@@ -136,7 +137,7 @@ const char *BLE_ERROR_CODE_KEY = "BleErrorCode";
 const char *MESSAGE_KEY = "Message";
 const char *ERROR_CHK_ENABLED_KEY = "ErrorCheckEnabled";
 const char *RSSI_KEY = "RSSI_dBm";
-
+const char *GROUP_ADDR_KEY = "GroupAddr";
 
 bool powerDownFlag = false;
 
@@ -213,8 +214,24 @@ void enqueue_for_publish(char *ack)
     if (xQueueSend(publish_queue, &ack, portMAX_DELAY) != pdPASS)
     {
         ESP_LOGE(LTE_TAG, "Publish Queue Full. Failed to enqueue ACK");
+        free(ack); 
     }
     ESP_LOGW(LTE_TAG, "Current publish queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(publish_queue), esp_get_minimum_free_heap_size());
+}
+
+#define GROUP_TABLE_BUFFER_LEN  5120 
+
+void handle_group_table_query(CommandStruct *cmd)
+{
+    ESP_LOGW(LTE_TAG, "Group table query from cloud");
+    char *buffer = (char *)malloc(sizeof(char) * GROUP_TABLE_BUFFER_LEN);
+    if (!buffer)
+    {
+        ESP_LOGE(LTE_TAG, "%s() - Memory allocation failed", __func__);
+        return;
+    }
+    group_table_build_json(buffer, GROUP_TABLE_BUFFER_LEN, cmd->msgseqno, serialNoStr);
+    enqueue_for_publish(buffer);
 }
 
 /**
@@ -374,12 +391,10 @@ void construct_general_ack(error_codes err)
  */
 void generate_ack(mqtt_packets packetid, CommandStruct *cmd_struct)
 {
+    ESP_LOGD(LTE_TAG, "generate_ack ID:%d heap:%lu", packetid, esp_get_free_heap_size());
     char *buffer = (char *)malloc(sizeof(char) * MQTT_ACK_BUFFER_LEN);
-    if (!buffer)
-    {
-        ESP_LOGE(LTE_TAG, "%s() - Memory allocation failed", __func__);
-        return;
-    }
+    if (!buffer) { ESP_LOGE(LTE_TAG, "generate_ack malloc failed"); return; }
+    
     jWriteControl_t jwc;
 
     jwOpen(&jwc, buffer, MQTT_ACK_BUFFER_LEN, JW_OBJECT, 1);
@@ -709,10 +724,91 @@ void generate_ack(mqtt_packets packetid, CommandStruct *cmd_struct)
         jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
         break;
 
+    case GWY_GROUP_SUB_ACK:
+        jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
+        jwObj_int(&jwc, MSG_SEQ_NO_KEY, cmd_struct->msgseqno);
+        jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
+        jwObj_int(&jwc, ELEMENT_ADDR_KEY, cmd_struct->elemaddr);
+        jwObj_int(&jwc, GROUP_ADDR_KEY, cmd_struct->groupaddr);
+        jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
+        jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
+        jwEnd(&jwc);
+        break;
+
+    case GWY_GROUP_UNSUB_ACK:
+        jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
+        jwObj_int(&jwc, MSG_SEQ_NO_KEY, cmd_struct->msgseqno);
+        jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
+        jwObj_int(&jwc, ELEMENT_ADDR_KEY, cmd_struct->elemaddr);
+        jwObj_int(&jwc, GROUP_ADDR_KEY, cmd_struct->groupaddr);
+        jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
+        jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
+        jwEnd(&jwc);
+        break;
+
+    case NODE_GROUP_SUB_ACK:
+        jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
+        jwObj_int(&jwc, MSG_SEQ_NO_KEY, cmd_struct->msgseqno);
+        jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
+        jwObj_string(&jwc, NODE_SER_NO_KEY, cmd_struct->deviceName);
+        jwObj_int(&jwc, ELEMENT_ADDR_KEY, cmd_struct->elemaddr);
+        jwObj_int(&jwc, GROUP_ADDR_KEY, cmd_struct->groupaddr);
+        jwObj_int(&jwc, RSSI_KEY, cmd_struct->rssi);
+        jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
+        jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
+        jwObj_int(&jwc, BLE_ERROR_CODE_KEY, cmd_struct->bleErrorCode);
+        jwEnd(&jwc);
+        break;
+
+    case NODE_GROUP_UNSUB_ACK:
+        jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
+        jwObj_int(&jwc, MSG_SEQ_NO_KEY, cmd_struct->msgseqno);
+        jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
+        jwObj_string(&jwc, NODE_SER_NO_KEY, cmd_struct->deviceName);
+        jwObj_int(&jwc, ELEMENT_ADDR_KEY, cmd_struct->elemaddr);
+        jwObj_int(&jwc, GROUP_ADDR_KEY, cmd_struct->groupaddr);
+        jwObj_int(&jwc, RSSI_KEY, cmd_struct->rssi);
+        jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
+        jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
+        jwObj_int(&jwc, BLE_ERROR_CODE_KEY, cmd_struct->bleErrorCode);
+        break;
+
+    case NODE_GROUP_AC_CONTROL_IMMEDIATE_ACK:
+        bool gwy_sub    = group_table_is_subscribed(cmd_struct->groupaddr, PROV_OWN_ADDR);
+        uint8_t total   = group_table_get_count(cmd_struct->groupaddr);
+        uint8_t node_count = gwy_sub ? total - 1 : total;
+        jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
+        jwObj_int(&jwc, MSG_SEQ_NO_KEY, cmd_struct->msgseqno);
+        jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
+        jwObj_int(&jwc, GROUP_ADDR_KEY, cmd_struct->groupaddr);
+        jwObj_int(&jwc, "GwySubscribed", gwy_sub ? 1 : 0);
+        jwObj_int(&jwc, "NodeCount", node_count);
+        jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
+        jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
+        break;
+        
+    case NODE_GROUP_AC_CONTROL_SUMMARY_ACK:
+        jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
+        jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
+        jwObj_int(&jwc, GROUP_ADDR_KEY, cmd_struct->groupaddr);
+        GroupAckTracker_t *t = group_tracker_find_by_seq(cmd_struct->group_cmd_seq);
+        jwObj_int(&jwc, "Seq", cmd_struct->group_cmd_seq);
+        jwObj_int(&jwc, "GwySubscribed", t ? t->gwy_subscribed : 0);
+        jwObj_int(&jwc, "ExpectedNodes", t ? t->expected : 0);
+        jwObj_int(&jwc, "ReceivedAcks",  t ? t->received : 0);
+        jwObj_int(&jwc, "FailedCount",   t ? t->failed_count : 0);
+        jwObj_array(&jwc, "FailedNodes");
+        if (t)
+            for (int i = 0; i < t->failed_count; i++)
+                jwArr_int(&jwc, t->failed_addrs[i]);
+        jwEnd(&jwc);
+        break;
+
     default:
         ESP_LOGE(LTE_TAG, "Unknown Packet - %d in %s", cmd_struct->packetid, __func__);
         jwEnd(&jwc);
         jwClose(&jwc);
+        free(buffer);
         return;
     }
     jwEnd(&jwc);
@@ -860,6 +956,16 @@ bool isValidMacId(char *macid)
         return false;
 }
 
+void normalize_mode(const char *raw_mode, char *mode_str_out, uint8_t *mode_num_out)
+{
+    if      (strcasecmp(raw_mode, "Cool") == 0) { strcpy(mode_str_out, COOL_MODE_STR); *mode_num_out = 1; }
+    else if (strcasecmp(raw_mode, "Hot")  == 0 ||
+             strcasecmp(raw_mode, "Heat") == 0) { strcpy(mode_str_out, HEAT_MODE_STR); *mode_num_out = 2; }
+    else if (strcasecmp(raw_mode, "Auto") == 0) { strcpy(mode_str_out, AUTO_MODE_STR); *mode_num_out = 0; }
+    else if (strcasecmp(raw_mode, "Dry")  == 0) { strcpy(mode_str_out, DRY_MODE_STR);  *mode_num_out = 3; }
+    else if (strcasecmp(raw_mode, "Fan")  == 0) { strcpy(mode_str_out, FAN_MODE_STR);  *mode_num_out = 4; }
+}
+
 /**
  * @brief Function that validates the command received from MQTT
  * @param json_obj Parsed MQTT command json object
@@ -928,7 +1034,9 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
     // If it's a Node packet (but not prov packet), let's check for element addr
     cJSONTestValue = cJSON_GetObjectItem(json_obj, ELEMENT_ADDR_KEY);
     if ((cmd_struct->packetid >= 100 && cmd_struct->packetid < MAX_NODE_PACKET_ID) &&
-        cmd_struct->packetid != NODE_PROV_PACKET)
+        cmd_struct->packetid != NODE_PROV_PACKET && 
+        cmd_struct->packetid != NODE_GROUP_AC_CONTROL_PACKET
+    )
     {
         if (cJSONTestValue == NULL)
         {
@@ -1004,7 +1112,9 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         return;
     }
 
-    if (cmd_struct->packetid == GWY_AC_CONTROL_PACKET || cmd_struct->packetid == NODE_AC_CONTROL_PACKET)
+    if (cmd_struct->packetid == GWY_AC_CONTROL_PACKET || 
+        cmd_struct->packetid == NODE_AC_CONTROL_PACKET || 
+        cmd_struct->packetid == NODE_GROUP_AC_CONTROL_PACKET)
     {
         if (cmd_struct->packetid == GWY_AC_CONTROL_PACKET && !configured)
         {
@@ -1012,6 +1122,35 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
             return;
         }
 
+    // For group control — validate GroupAddr and check subscription
+    if (cmd_struct->packetid == NODE_GROUP_AC_CONTROL_PACKET)
+    {
+        cJSONTestValue = cJSON_GetObjectItem(json_obj, GROUP_ADDR_KEY);
+        if (cJSONTestValue == NULL)
+        {
+            cmd_struct->errorcode = MISSING_GROUP_ADDR;
+            return;
+        }
+        else if (!cJSON_IsNumber(cJSONTestValue))
+        {
+            cmd_struct->errorcode = GROUP_ADDR_INVALID_FORMAT;
+            return;
+        }
+        uint16_t groupAddr = (uint16_t)cJSONTestValue->valuedouble;
+        if (groupAddr < 0xC000 || groupAddr > 0xFFFE)
+        {
+            cmd_struct->errorcode = GROUP_ADDR_EXCEEDING_RANGE;
+            return;
+        }
+        cmd_struct->groupaddr = (uint16_t)groupAddr;
+
+        if (group_table_get_count(cmd_struct->groupaddr) == 0)
+        {
+            cmd_struct->errorcode = NODE_NOT_IN_GROUP;
+            return;
+        }
+    }
+                     
         int power, temperature, fanspeed, swingh, swingv, locking, ontimer, offtimer, upperTemperatureLimit, lowerTemperatureLimit;
         char mode[6] = "";
 
@@ -1210,12 +1349,9 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         // }
 
         /* Setting mode_num */ 
-        strcpy(cmd_struct->mode_str, mode);
-        if (strcasecmp(mode, "Auto") == 0) cmd_struct->mode_num = 0;  /* stdAc::opmode_t::kAuto */
-        else if (strcasecmp(mode, "Cool") == 0) cmd_struct->mode_num = 1;  /* stdAc::opmode_t::kCool */
-        else if (strcasecmp(mode, "Hot")  == 0) cmd_struct->mode_num = 2;  /* stdAc::opmode_t::kHeat */
-        else if (strcasecmp(mode, "Dry")  == 0) cmd_struct->mode_num = 3;  /* stdAc::opmode_t::kDry  */
-        else if (strcasecmp(mode, "Fan")  == 0) cmd_struct->mode_num = 4;  /* stdAc::opmode_t::kFan  */
+        normalize_mode(mode, cmd_struct->mode_str, &cmd_struct->mode_num);
+        ESP_LOGI(LTE_TAG, "Mode normalized: '%s' → '%s' (mode_num=%d)",
+                mode, cmd_struct->mode_str, cmd_struct->mode_num);
 
         /* Setting Swing Horizontal  */ 
         if (swingh != 0 && swingh != 1)
@@ -1522,6 +1658,34 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         cmd_struct->resetDevice = reset;
         return;
     }
+
+    // Validate GWY group subscribe / unsubscribe packets
+    if (cmd_struct->packetid == GWY_GROUP_SUB_PACKET || cmd_struct->packetid == GWY_GROUP_UNSUB_PACKET || 
+        cmd_struct->packetid == NODE_GROUP_SUB_PACKET || cmd_struct->packetid == NODE_GROUP_UNSUB_PACKET)
+    {
+        cJSONTestValue = cJSON_GetObjectItem(json_obj, GROUP_ADDR_KEY);
+        if (cJSONTestValue == NULL)
+        {
+            cmd_struct->errorcode = MISSING_GROUP_ADDR;
+            return;
+        }
+        else if (!cJSON_IsNumber(cJSONTestValue))
+        {
+            cmd_struct->errorcode = GROUP_ADDR_INVALID_FORMAT;
+            return;
+        }
+
+        // Parse double safely to uint16_t using bitwise cast
+        int groupAddr = cJSONTestValue->valueint;
+        if ((uint16_t)groupAddr < 0xC000 || (uint16_t)groupAddr > 0xFFFE)
+        {
+            cmd_struct->errorcode = GROUP_ADDR_EXCEEDING_RANGE;
+            return;
+        }
+
+        cmd_struct->groupaddr = (uint16_t)groupAddr;
+        return;
+    }
 }
 
 /**
@@ -1561,6 +1725,40 @@ void unregister(uint16_t msgseqno)
     powerDownFlag = true;
 }
 
+void handle_group_ac_control(CommandStruct *cmd)
+{
+    GroupEntry_t *entry = group_table_get_entry(cmd->groupaddr);
+    bool gwy_subscribed = group_table_is_subscribed(cmd->groupaddr, PROV_OWN_ADDR);
+    uint8_t node_count  = gwy_subscribed ? entry->node_count - 1 : entry->node_count;
+
+    ESP_LOGW(LTE_TAG, "Group AC control: group 0x%04x | GWY=%d | nodes=%d",
+        cmd->groupaddr, gwy_subscribed, node_count);
+
+    // Step 1 — GWY controls its own AC if subscribed
+    if (gwy_subscribed)
+        handle_ac_control(cmd);
+
+    // Step 2 — Send to BLE Mesh group if nodes subscribed
+    if (node_count > 0)
+    {
+        GroupAckTracker_t *tracker = group_tracker_alloc(entry, cmd->groupaddr, gwy_subscribed ? 1 : 0);
+        if (tracker == NULL)
+        {
+            cmd->errorcode = FAILURE;
+            generate_ack(NODE_GROUP_AC_CONTROL_IMMEDIATE_ACK, cmd);
+            return;
+        }
+        cmd->group_cmd_seq = tracker->seq;
+        memcpy(&tracker->cmd, cmd, sizeof(CommandStruct));
+
+        ble_send_group_ac_control(cmd);
+    }
+
+    // Step 3 — Immediate ACK to cloud
+    cmd->errorcode = SUCCESS;
+    generate_ack(NODE_GROUP_AC_CONTROL_IMMEDIATE_ACK, cmd);
+}
+
 void parse_json()
 {
     led_set_state(LED_STATE_CMD_RECVD);
@@ -1580,66 +1778,91 @@ void parse_json()
     {
         switch (cmd_struct.packetid)
         {
-        case GWY_REG_PACKET:
-            register_gwy();
-            break;
+            case GWY_REG_PACKET:
+                register_gwy();
+                break;
 
-        case GWY_UNREG_PACKET:
-            unregister(cmd_struct.msgseqno);
-            return;
+            case GWY_UNREG_PACKET:
+                unregister(cmd_struct.msgseqno);
+                return;
 
-        case GWY_AC_CONTROL_PACKET:
-            handle_ac_control(&cmd_struct);
-            generate_ack(GWY_AC_CONTROL_ACK, &cmd_struct);
-            return;
+            case GWY_AC_CONTROL_PACKET:
+                handle_ac_control(&cmd_struct);
+                generate_ack(GWY_AC_CONTROL_ACK, &cmd_struct);
+                return;
 
-        case GWY_RECONF_PACKET:
-            handle_reconfiguration(&cmd_struct);
-            break;
+            case GWY_RECONF_PACKET:
+                handle_reconfiguration(&cmd_struct);
+                break;
 
-        case GWY_HEARTBEAT_PUB_CONF_PACKET:
-            handle_setting_hb_publish_configuration(cmd_struct.publishPeriodSec);
-            break;
+            case GWY_HEARTBEAT_PUB_CONF_PACKET:
+                handle_setting_hb_publish_configuration(cmd_struct.publishPeriodSec);
+                break;
 
-        case GWY_DEBUG_INFO_PACKET:
-            if (!cmd_struct.resetDevice && !cmd_struct.restartDevice)
-                generate_ack(cmd_struct.packetid, &cmd_struct);
-            if (cmd_struct.resetDevice)
-            {
-                cmd_struct.errorcode = factory_reset_device();
-                generate_and_publish_debug_info_ack(&cmd_struct);
-                powerCycleDevice(DUE_TO_MQTT_CMD);
-            }
-            if (cmd_struct.restartDevice)
-            {
-                generate_and_publish_debug_info_ack(&cmd_struct);
-                powerCycleDevice(DUE_TO_MQTT_CMD);
-            }
-            return;
+            case GWY_DEBUG_INFO_PACKET:
+                if (!cmd_struct.resetDevice && !cmd_struct.restartDevice)
+                    generate_ack(cmd_struct.packetid, &cmd_struct);
+                if (cmd_struct.resetDevice)
+                {
+                    cmd_struct.errorcode = factory_reset_device();
+                    generate_and_publish_debug_info_ack(&cmd_struct);
+                    powerCycleDevice(DUE_TO_MQTT_CMD);
+                }
+                if (cmd_struct.restartDevice)
+                {
+                    generate_and_publish_debug_info_ack(&cmd_struct);
+                    powerCycleDevice(DUE_TO_MQTT_CMD);
+                }
+                return;
 
-        case GWY_TEACHING_MODE:
-            handle_configuring_teaching_mode(DUE_TO_MQTT_CMD, &cmd_struct);
-            return;
+            case GWY_TEACHING_MODE:
+                handle_configuring_teaching_mode(DUE_TO_MQTT_CMD, &cmd_struct);
+                return;
 
-        case GWY_TEACHING_MODE_CMD_SELECTION_PACKET:
-            break;
+            case GWY_TEACHING_MODE_CMD_SELECTION_PACKET:
+                break;
 
-        case NODE_AC_CONTROL_PACKET:
-            send_cmd_to_node(&cmd_struct);
-            ESP_LOGW(LTE_TAG, "Currnet command queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(command_queue), esp_get_minimum_free_heap_size());
-            return;
-        case NODE_UNPROV_PACKET:
-        case NODE_DEBUG_INFO_PACKET:
-        case NODE_RECONF_PACKET:
-        case NODE_HEARTBEAT_PUB_CONF_PACKET:
-        case NODE_TEACHING_MODE:
-        case NODE_TEACHING_MODE_CMD_SELECTION_PACKET:
-            send_cmd_to_node(&cmd_struct);
-            ESP_LOGW(LTE_TAG, "Currnet command queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(command_queue), esp_get_minimum_free_heap_size());
-            return;
+            case GWY_GROUP_TABLE_PACKET:
+                handle_group_table_query(&cmd_struct);
+                return;
 
-        default:
-            break;
+            case NODE_AC_CONTROL_PACKET:
+                send_cmd_to_node(&cmd_struct);
+                ESP_LOGW(LTE_TAG, "Currnet command queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(command_queue), esp_get_minimum_free_heap_size());
+                return;
+            case NODE_UNPROV_PACKET:
+            case NODE_DEBUG_INFO_PACKET:
+            case NODE_RECONF_PACKET:
+            case NODE_HEARTBEAT_PUB_CONF_PACKET:
+            case NODE_TEACHING_MODE:
+            case NODE_TEACHING_MODE_CMD_SELECTION_PACKET:
+                send_cmd_to_node(&cmd_struct);
+                ESP_LOGW(LTE_TAG, "Currnet command queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(command_queue), esp_get_minimum_free_heap_size());
+                return;
+
+            case GWY_GROUP_SUB_PACKET:
+                ESP_LOGI(LTE_TAG, "Group sub received for group 0x%04x", cmd_struct.groupaddr);
+                handle_gwy_group_subscribe(&cmd_struct);
+                return;
+
+            case GWY_GROUP_UNSUB_PACKET:
+                ESP_LOGI(LTE_TAG, "Group unsub received for group 0x%04x", cmd_struct.groupaddr);
+                handle_gwy_group_unsubscribe(&cmd_struct);
+                return;
+
+            case NODE_GROUP_SUB_PACKET:
+            case NODE_GROUP_UNSUB_PACKET:
+                send_cmd_to_node(&cmd_struct);
+                ESP_LOGW(LTE_TAG, "Group sub/unsub sent to node 0x%04x for group 0x%04x",
+                    cmd_struct.elemaddr, cmd_struct.groupaddr);
+                return;
+
+            case NODE_GROUP_AC_CONTROL_PACKET:
+                handle_group_ac_control(&cmd_struct);
+                return;
+
+            default:
+                break;
         }
         generate_ack(cmd_struct.packetid, &cmd_struct);
     }
@@ -1659,11 +1882,22 @@ void parse_json()
             generate_ack(NODE_TEACHING_MODE, NULL);
             return;
         }
+
         strcpy(cmd_struct.deviceName, "");
         if (cmd_struct.packetid == GWY_AC_CONTROL_PACKET)
             generate_ack(GWY_AC_CONTROL_ACK, &cmd_struct);
         else if (cmd_struct.packetid == NODE_AC_CONTROL_PACKET)
             generate_ack(NODE_AC_CONTROL_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == GWY_GROUP_SUB_PACKET)
+            generate_ack(GWY_GROUP_SUB_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == GWY_GROUP_UNSUB_PACKET)
+            generate_ack(GWY_GROUP_UNSUB_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == NODE_GROUP_SUB_PACKET)
+            generate_ack(GWY_GROUP_SUB_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == NODE_GROUP_UNSUB_PACKET)
+            generate_ack(GWY_GROUP_UNSUB_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == NODE_GROUP_AC_CONTROL_PACKET)
+            generate_ack(NODE_GROUP_AC_CONTROL_IMMEDIATE_ACK, &cmd_struct);
         else
             generate_ack(cmd_struct.packetid, &cmd_struct);
     }
@@ -1954,6 +2188,7 @@ void maintainMQTTConnection()
         ping_fail_counter = 0;
         maintainCommandQueue();
         publish_from_queue();
+        group_tracker_check_timeouts();   
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

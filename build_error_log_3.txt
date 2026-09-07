@@ -1,0 +1,50 @@
+
+D:\Freelance\Unimation\ble_mesh\ble_mesh_ur>idf.py build
+Executing action: all (aliases: build)
+Running ninja in directory D:\Freelance\Unimation\ble_mesh\ble_mesh_ur\build
+Executing "ninja all"...
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D D:\Freelance\U...tion/ble_mesh/ble_mesh_ur/build/bootloader/bootloader.bin"Bootloader binary size 0x51d0 bytes. 0x2e30 bytes (36%) free.
+[4/9] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/src/ir.cpp.objD:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp: In function 'void ir_recv_task(void*)':
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::bleErrorCode' [-Wmissing-field-initializers]
+ 1339 |             CommandStruct ack = {0};    // zero initialize — prevents garbage fields over BLE
+      |                                   ^
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::deviceUpTimeHrs' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::packetid' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::irProtocolNum' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::msgseqno' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::elemaddr' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::groupaddr' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::group_cmd_seq' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::ontimer' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::offtimer' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::publishPeriodSec' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::ambientTemperatureDigital' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::ambientTemperatureAnalog' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::errorcode' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::power' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::temperature' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::fanspeed' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::mode_num' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::swingh' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::swingv' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::locking' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::upperTemperatureLimit' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::lowerTemperatureLimit' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::resetDevice' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::restartDevice' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::logging' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::teachingStart' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::startingTemperature' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::endingTemperature' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::majversion' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::minversion' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::patchversion' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::provisioned' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::errorCheckEnabled' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::rssi' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::requestSentToNode' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::configured' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::mode_str' [-Wmissing-field-initializers]
+D:/Freelance/Unimation/ble_mesh/ble_mesh_ur/main/src/ir.cpp:1339:35: warning: missing initializer for member 'CommandStruct::deviceName' [-Wmissing-field-initializers]
+[8/9] Generating binary image from built executableesptool.py v4.12.0
+Creating esp32s3 image...

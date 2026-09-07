@@ -15,6 +15,7 @@
 #include <led.h>
 #include <ble_new.h>
 #include <group_table.h>
+#include <lte.h>
 
 #define NVS_TAG "NVS"
 
@@ -117,6 +118,10 @@ void get_last_ac_cmd_in_nvs_flash()
 {
     size_t size = sizeof(CommandStruct);
     esp_err_t err = nvs_get_blob(ir_nvs_handle, NVS_LAST_COMMAND_KEY, &last_command, &size);
+    uint8_t dummy_num = last_command.mode_num;
+    normalize_mode(last_command.mode_str, last_command.mode_str, &dummy_num);
+    ESP_LOGI(NVS_TAG, "Mode restored from NVS: '%s' (mode_num=%d)",
+    last_command.mode_str, last_command.mode_num);
     if(err) ESP_LOGE(NVS_TAG, "Failed to get %s from nvs flash : %s", NVS_LAST_COMMAND_KEY, esp_err_to_name(err));
 }
 

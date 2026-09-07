@@ -1,0 +1,137 @@
+void parse_json()
+{
+    led_set_state(LED_STATE_CMD_RECVD);
+    CommandStruct cmd_struct;
+
+    cJSON *json_obj = cJSON_Parse(LTE_UART_data);
+    if (json_obj == NULL)
+    {
+        ESP_LOGE(LTE_TAG, "MQTT command parsing failed");
+        return;
+    }
+
+    error_check_json(json_obj, &cmd_struct);
+    ESP_LOGE(LTE_TAG, "Error Code : %s - %d", get_error_code_name(cmd_struct.errorcode), cmd_struct.errorcode);
+
+    if (cmd_struct.errorcode == SUCCESS)
+    {
+        switch (cmd_struct.packetid)
+        {
+            case GWY_REG_PACKET:
+                register_gwy();
+                break;
+
+            case GWY_UNREG_PACKET:
+                unregister(cmd_struct.msgseqno);
+                return;
+
+            case GWY_AC_CONTROL_PACKET:
+                handle_ac_control(&cmd_struct);
+                generate_ack(GWY_AC_CONTROL_ACK, &cmd_struct);
+                return;
+
+            case GWY_RECONF_PACKET:
+                handle_reconfiguration(&cmd_struct);
+                break;
+
+            case GWY_HEARTBEAT_PUB_CONF_PACKET:
+                handle_setting_hb_publish_configuration(cmd_struct.publishPeriodSec);
+                break;
+
+            case GWY_DEBUG_INFO_PACKET:
+                if (!cmd_struct.resetDevice && !cmd_struct.restartDevice)
+                    generate_ack(cmd_struct.packetid, &cmd_struct);
+                if (cmd_struct.resetDevice)
+                {
+                    cmd_struct.errorcode = factory_reset_device();
+                    generate_and_publish_debug_info_ack(&cmd_struct);
+                    powerCycleDevice(DUE_TO_MQTT_CMD);
+                }
+                if (cmd_struct.restartDevice)
+                {
+                    generate_and_publish_debug_info_ack(&cmd_struct);
+                    powerCycleDevice(DUE_TO_MQTT_CMD);
+                }
+                return;
+
+            case GWY_TEACHING_MODE:
+                handle_configuring_teaching_mode(DUE_TO_MQTT_CMD, &cmd_struct);
+                return;
+
+            case GWY_TEACHING_MODE_CMD_SELECTION_PACKET:
+                break;
+
+            case NODE_AC_CONTROL_PACKET:
+                send_cmd_to_node(&cmd_struct);
+                ESP_LOGW(LTE_TAG, "Currnet command queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(command_queue), esp_get_minimum_free_heap_size());
+                return;
+            case NODE_UNPROV_PACKET:
+            case NODE_DEBUG_INFO_PACKET:
+            case NODE_RECONF_PACKET:
+            case NODE_HEARTBEAT_PUB_CONF_PACKET:
+            case NODE_TEACHING_MODE:
+            case NODE_TEACHING_MODE_CMD_SELECTION_PACKET:
+                send_cmd_to_node(&cmd_struct);
+                ESP_LOGW(LTE_TAG, "Currnet command queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(command_queue), esp_get_minimum_free_heap_size());
+                return;
+
+            case GWY_GROUP_SUB_PACKET:
+                handle_gwy_group_subscribe(&cmd_struct);
+                return;
+
+            case GWY_GROUP_UNSUB_PACKET:
+                handle_gwy_group_unsubscribe(&cmd_struct);
+                return;
+
+            case NODE_GROUP_SUB_PACKET:
+            case NODE_GROUP_UNSUB_PACKET:
+                send_cmd_to_node(&cmd_struct);
+                ESP_LOGW(LTE_TAG, "Group sub/unsub sent to node 0x%04x for group 0x%04x",
+                    cmd_struct.elemaddr, cmd_struct.groupaddr);
+                return;
+
+            case NODE_GROUP_AC_CONTROL_PACKET:
+                handle_group_ac_control(&cmd_struct);
+                return;
+
+            default:
+                break;
+        }
+    }
+    generate_ack(cmd_struct.packetid, &cmd_struct);
+    else     /* Received MQTT payload from cloud is malformed */
+    {
+        led_set_state(LED_STATE_INVALID_OPERATION);
+
+        if (cmd_struct.packetid == GWY_TEACHING_MODE)
+        {
+            teaching_mode_t.errorCode = cmd_struct.errorcode;
+            generate_ack(GWY_TEACHING_MODE, NULL);
+            return;
+        }
+        else if (cmd_struct.packetid == NODE_TEACHING_MODE)
+        {
+            teaching_mode_t.errorCode = cmd_struct.errorcode;
+            generate_ack(NODE_TEACHING_MODE, NULL);
+            return;
+        }
+
+        strcpy(cmd_struct.deviceName, "");
+        if (cmd_struct.packetid == GWY_AC_CONTROL_PACKET)
+            generate_ack(GWY_AC_CONTROL_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == NODE_AC_CONTROL_PACKET)
+            generate_ack(NODE_AC_CONTROL_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == GWY_GROUP_SUB_PACKET)
+            generate_ack(GWY_GROUP_SUB_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == GWY_GROUP_UNSUB_PACKET)
+            generate_ack(GWY_GROUP_UNSUB_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == NODE_GROUP_SUB_PACKET)
+            generate_ack(GWY_GROUP_SUB_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == NODE_GROUP_UNSUB_PACKET)
+            generate_ack(GWY_GROUP_UNSUB_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == NODE_GROUP_AC_CONTROL_PACKET)
+            generate_ack(NODE_GROUP_AC_CONTROL_IMMEDIATE_ACK, &cmd_struct);
+        else
+            generate_ack(cmd_struct.packetid, &cmd_struct);
+    }
+}

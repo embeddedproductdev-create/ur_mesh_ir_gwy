@@ -35,7 +35,7 @@ OUTPUT_DIR = os.path.join(PROJECT_DIR, "merged_bin_test")
 BOOTLOADER_OFFSET = "0x0"
 PARTITION_OFFSET  = "0x8000"
 SERIAL_OFFSET     = "0x1b000"
-APP_OFFSET        = "0x20000"
+APP_OFFSET        = "0x30000"
 
 CHIP        = "esp32s3"
 FLASH_MODE  = "dio"

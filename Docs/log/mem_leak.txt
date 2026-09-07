@@ -1,0 +1,171 @@
+94) LTE: Current publish queue count : 0 | Heap : 8558068 bytes
+I (510785) BLE: Incoming BLE msg RSSI: -32 dBm
+I (510786) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (510792) LTE: Current publish queue count : 1 | Heap : 8558068 bytes
+W (512365) LTE: Current publish queue count : 0 | Heap : 8558068 bytes
+I (520782) BLE: Incoming BLE msg RSSI: -31 dBm
+I (520782) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (520789) LTE: Current publish queue count : 1 | Heap : 8558068 bytes
+W (522554) LTE: Current publish queue count : 0 | Heap : 8558068 bytes
+I (530781) BLE: Incoming BLE msg RSSI: -33 dBm
+I (530781) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (530788) LTE: Current publish queue count : 1 | Heap : 8558068 bytes
+W (532395) LTE: Current publish queue count : 0 | Heap : 8558068 bytes
+I (540809) BLE: Incoming BLE msg RSSI: -33 dBm
+I (540809) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (540816) LTE: Current publish queue count : 1 | Heap : 8558068 bytes
+W (541646) HEALTH: ========== HEALTH CHECK ==========
+W (541646) HEALTH: Free heap        : 8558740 bytes
+W (541646) HEALTH: Min free heap    : 8558068 bytes
+W (541652) HEALTH: Publish queue    : 0 / 24 items
+W (541657) HEALTH: Command queue    : 0 / 10 items
+W (541663) HEALTH: LTE task HWM     : 1284 words
+W (541668) HEALTH: IR task HWM      : 5580 words
+W (541673) HEALTH: Button task HWM  : 1872 words
+W (541678) HEALTH: MQTT connected   : 1
+W (541683) HEALTH: Uptime           : 541 seconds
+W (541688) HEALTH: ==================================
+W (542634) LTE: Current publish queue count : 0 | Heap : 8558068 bytes
+I (550782) BLE: Incoming BLE msg RSSI: -32 dBm
+I (550783) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (550789) LTE: Current publish queue count : 1 | Heap : 8558068 bytes
+W (552614) LTE: Current publish queue count : 0 | Heap : 8558068 bytes
+I (560788) BLE: Incoming BLE msg RSSI: -31 dBm
+I (560789) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (560795) LTE: Current publish queue count : 1 | Heap : 8558068 bytes
+W (562395) LTE: Current publish queue count : 0 | Heap : 8558068 bytes
+I (570783) BLE: Incoming BLE msg RSSI: -33 dBm
+I (570783) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (570790) LTE: Current publish queue count : 1 | Heap : 8558068 bytes
+W (572624) LTE: Current publish queue count : 0 | Heap : 8558068 bytes
+W (575897) LTE: {"JsonPacketID":114,"MsgSeqNo":22,"ElementAddr":5,"GroupAddr":49153}"
+
+OK
+
+E (576898) LTE: Error Code : SUCCESS - 0
+I (576898) BLE: Sending Group Subscribe to node 0x0005 for group 0xc001
+W (576900) LTE: Group sub/unsub sent to node 0x0005 for group 0xc001
+I (576960) BLE: Send 0xc002e5
+W (577500) LTE: {"JsonPacketID":14,"MsgSeqNo":20,"ElementAddr":1,"GroupAddr":49153}"
+
++QPING: 0,"142.251.222.142",64,34,255
+
++QPING: 0,1,1,0,34,34,34
+
+E (578504) LTE: Error Code : SUCCESS - 0
+I (578504) LTE: Group sub received for group 0xc001
+W (578505) LTE: GWY subscribing itself to group 0xc001
+I (578510) LTE: GWY subscribed to group 0xc001
+W (578514) GROUP_TABLE: 0x0001 already in group 0xc001 — no change
+W (578522) LTE: Current publish queue count : 1 | Heap : 8557676 bytes
+I (579332) BLE: Recv 0x06c102e5, tid 0x0000, time 2371981us
+I (579333) BLE: Incoming BLE msg RSSI: -33 dBm
+I (579333) BLE: Incoming BLE Msg: packetid=0x0074, elemaddr=0x0005, groupaddr=0xc001, msgseqno=22, errorcode=0
+I (579344) BLE: Node 0x0005 group subscribe ACK — group 0xc001 err=0
+I (579356) GROUP_TABLE: Group table saved (2 groups)
+I (579357) GROUP_TABLE: 0x0005 added to group 0xc001 (2 members)
+I (579363) BLE: Group 0xc001 now has 2 members
+W (579368) LTE: Current publish queue count : 1 | Heap : 8556620 bytes
+I (579376) LTE: Removing item with msgseqno=22
+W (579380) LTE: Current command queue count : 0 | Heap : 8556444 bytes
+W (580111) LTE: Current publish queue count : 1 | Heap : 8556444 bytes
+I (580782) BLE: Incoming BLE msg RSSI: -33 dBm
+I (580782) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (580789) LTE: Current publish queue count : 1 | Heap : 8556444 bytes
+W (581917) LTE: Current publish queue count : 1 | Heap : 8556444 bytes
+W (583742) LTE: Current publish queue count : 0 | Heap : 8556444 bytes
+I (590808) BLE: Incoming BLE msg RSSI: -33 dBm
+I (590809) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (590815) LTE: Current publish queue count : 1 | Heap : 8556444 bytes
+W (592416) LTE: Current publish queue count : 0 | Heap : 8556444 bytes
+I (600781) BLE: Incoming BLE msg RSSI: -34 dBm
+I (600781) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (600788) LTE: Current publish queue count : 1 | Heap : 8556444 bytes
+W (601646) HEALTH: ========== HEALTH CHECK ==========
+W (601646) HEALTH: Free heap        : 8558132 bytes
+W (601646) HEALTH: Min free heap    : 8556444 bytes
+W (601652) HEALTH: Publish queue    : 0 / 24 items
+W (601657) HEALTH: Command queue    : 0 / 10 items
+W (601663) HEALTH: LTE task HWM     : 1284 words
+W (601668) HEALTH: IR task HWM      : 5580 words
+W (601673) HEALTH: Button task HWM  : 1872 words
+W (601678) HEALTH: MQTT connected   : 1
+W (601683) HEALTH: Uptime           : 601 seconds
+W (601688) HEALTH: ==================================
+W (602565) LTE: Current publish queue count : 0 | Heap : 8556444 bytes
+I (610783) BLE: Incoming BLE msg RSSI: -33 dBm
+I (610783) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (610790) LTE: Current publish queue count : 1 | Heap : 8556444 bytes
+W (612636) LTE: Current publish queue count : 0 | Heap : 8556444 bytes
+I (620785) BLE: Incoming BLE msg RSSI: -33 dBm
+I (620785) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (620792) LTE: Current publish queue count : 1 | Heap : 8556444 bytes
+W (622555) LTE: Current publish queue count : 0 | Heap : 8556444 bytes
+W (630638) LTE: {"JsonPacketID":118,"MsgSeqNo":24,"ElementAddr":5,"GroupAddr":49153,"Power":1,"Mode":"Cool","FanSpeed":3,"Temperature":24,"SwingH":0,"SwingV":0,"OnTimer":0,"OffTimer":0,"Locking":0,"TempLockUpLimit":32,"TempLockLowLimit":18}"
+
+I (630808) BLE: Incoming BLE msg RSSI: -34 dBm
+I (630808) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x0005, groupaddr=0x0000, msgseqno=0, errorcode=0
+W (630815) LTE: Current publish queue count : 1 | Heap : 8556444 bytes
+I (631649) LTE: Mode normalized: 'Cool' ? 'Cool' (mode_num=1)
+E (631650) LTE: Error Code : SUCCESS - 0
+W (631650) LTE: Group AC control: group 0xc001 | GWY=1 | nodes=1
+W (631657) IR_TX: TRANSMIT CALLED: power=1 temp=24 fanspeed=3 mode_num=1 mode_str=Cool protocol=15
+W (633307) IR: kTolerancePercentage : 25
+W (633307) IR: Protocol  : COOLIX
+Code      : 0xB25F40 (24 Bits)
+
+W (633308) IR: Protocol Number : 15 | Rawlen : 200
+W (633314) IR: Power: On, Mode: 0 (Cool), Fan: 2 (Med), Temp: 24C, Zone Follow: Off, Sensor Temp: Off
+
+I (633357) GROUP_TABLE: Tracker [seq=1] allocated: group=0xc001 expected=1 gwy=1 heap=8556860
+W (633358) BLE: Sending group AC control to 0xc001 (2 nodes)
+W (633363) LTE: Current publish queue count : 2 | Heap : 8555232 bytes
+I (633428) BLE: Send 0xc002e5
+W (634323) IR: locking_feature called: locking=0 power_val=0 mode=-1 temp_val=-1 limits=[18-32]
+W (634323) IR: isFetchControlInfoSuccessful: description='Power: On, Mode: 0 (Cool), Fan: 2 (Med), Temp: 24C, Zone Follow: Off, Sensor Temp: Off'
+W (634341) LTE: Current publish queue count : 2 | Heap : 8554308 bytes
+W (634975) LTE: Current publish queue count : 2 | Heap : 8554308 bytes
+W (636728) IR: kTolerancePercentage : 25
+W (636729) IR: Protocol  : UNKNOWN
+Code      : 0x25C4547E (101 Bits)
+
+W (636729) IR: Protocol Number : -1 | Rawlen : 202
+W (636782) LTE: Current publish queue count : 1 | Heap : 8554308 bytes
+I (637438) BLE: Incoming BLE msg RSSI: -32 dBm
+W (637439) LTE: Current publish queue count : 1 | Heap : 8554308 bytes
+I (638178) BLE: Incoming BLE msg RSSI: -33 dBm
+I (638179) BLE: Incoming BLE Msg: packetid=0x0076, elemaddr=0x0005, groupaddr=0xc001, msgseqno=24, errorcode=0
+I (638183) BLE: Node 0x0005 group AC ACK — seq=1 group=0xc001 err=0
+I (638190) GROUP_TABLE: Tracker [seq=1]: 1/1 ACKs (node 0x0005 err=0)
+W (638198) LTE: Current publish queue count : 2 | Heap : 8554308 bytes
+I (638205) GROUP_TABLE: Tracker [seq=1] freed — heap: 8554772
+W (638628) LTE: Current publish queue count : 2 | Heap : 8554308 bytes
+W (640474) LTE: Current publish queue count : 1 | Heap : 8554308 bytes
+I (640783) BLE: Incoming BLE msg RSSI: -32 dBm
+I (640784) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x3c10, groupaddr=0xc001, msgseqno=24, errorcode=0
+W (640790) LTE: Current publish queue count : 1 | Heap : 8554308 bytes
+W (642281) LTE: Current publish queue count : 1 | Heap : 8554308 bytes
+W (644107) LTE: Current publish queue count : 0 | Heap : 8554308 bytes
+I (650783) BLE: Incoming BLE msg RSSI: -33 dBm
+I (650784) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x3c10, groupaddr=0xc001, msgseqno=24, errorcode=0
+W (650790) LTE: Current publish queue count : 1 | Heap : 8554308 bytes
+W (652465) LTE: Current publish queue count : 0 | Heap : 8554308 bytes
+I (660791) BLE: Incoming BLE msg RSSI: -33 dBm
+I (660792) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x3c10, groupaddr=0xc001, msgseqno=24, errorcode=0
+W (660798) LTE: Current publish queue count : 1 | Heap : 8554308 bytes
+W (661646) HEALTH: ========== HEALTH CHECK ==========
+W (661646) HEALTH: Free heap        : 8557136 bytes
+W (661646) HEALTH: Min free heap    : 8554308 bytes
+W (661652) HEALTH: Publish queue    : 0 / 24 items
+W (661657) HEALTH: Command queue    : 0 / 10 items
+W (661663) HEALTH: LTE task HWM     : 1284 words
+W (661668) HEALTH: IR task HWM      : 5580 words
+W (661673) HEALTH: Button task HWM  : 1872 words
+W (661679) HEALTH: MQTT connected   : 1
+W (661683) HEALTH: Uptime           : 661 seconds
+W (661688) HEALTH: ==================================
+W (662385) LTE: Current publish queue count : 0 | Heap : 8554308 bytes
+I (670782) BLE: Incoming BLE msg RSSI: -33 dBm
+I (670783) BLE: Incoming BLE Msg: packetid=0x006a, elemaddr=0x3c10, groupaddr=0xc001, msgseqno=24, errorcode=0
+W (670789) LTE: Current publish queue count : 1 | Heap : 8554308 bytes
+W (672424) LTE: Current publish queue count : 0 | Heap : 8554308 bytes

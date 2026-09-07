@@ -1,0 +1,59 @@
+            CommandStruct ack;
+            /*AC Remote Configuration Process*/
+            if (!configured && !teaching_in_progress)
+            {
+                
+                ack.irProtocolNum = protocol;
+#if (IS_GWY)
+                ack.packetid = GWY_CONF_ACK;
+#else
+                ack.packetid = NODE_CONF_ACK;
+                strcpy(ack.deviceName, serialNoStr);
+                ack.elemaddr = last_command.elemaddr;
+#endif
+                if (is_sendable_protocol(protocol))
+                {
+                    configured = true; 
+                    update_led_status();
+                    ir_protocol_num = protocol;
+                    strcpy(ir_protocol, get_protocol_string(ir_protocol_num));
+                    set_number_in_nvs_flash(IR_HANDLE, NVS_IR_PROTOCOL_KEY, ir_protocol_num, INT16_SIZE);
+                    set_number_in_nvs_flash(GENERAL_HANDLE, NVS_CONFIGURED_KEY, 1, UINT8_SIZE);
+
+                    ack.errorcode = SUCCESS;
+#if (IS_GWY)
+                    generate_ack(GWY_CONF_ACK, &ack);
+#else
+                    send_ack_to_provisioner(NODE_CONF_ACK, &ack);
+#endif
+                    ESP_LOGI(IR_TAG, "AC Remote configuration successful");
+                    goto here;
+                }
+
+                led_set_state(LED_STATE_INVALID_OPERATION);
+
+                if (is_decodeable_protocol(protocol))
+                {
+                    ESP_LOGE(IR_TAG, "AC Remote Configuration Failed | Protocol is deocdeable-only");
+                    ESP_LOGW(IR_TAG, "Move on to Teaching mode with error checking");
+                    teaching_mode_t.errorCheckEnabled = 1;
+                    ack.errorcode = IR_PROTOCOL_DECODEABLE_ONLY;
+#if (IS_GWY)
+                    generate_ack(GWY_CONF_ACK, &ack);
+#else
+                    send_ack_to_provisioner(NODE_CONF_ACK, &ack);
+#endif
+                }
+                else
+                {
+                    ESP_LOGE(IR_TAG, "AC Remote Configuration Failed | Protocol is neither decodeable nor sendable");
+                    ESP_LOGW(IR_TAG, "Move on to Teaching mode without error checking");
+                    ack.errorcode = IR_PROTOCOL_FULLY_UNSUPPORTED;
+                    teaching_mode_t.errorCheckEnabled = 0;
+#if (IS_GWY)
+                    generate_ack(GWY_CONF_ACK, &ack);
+#else
+                    send_ack_to_provisioner(NODE_CONF_ACK, &ack);
+#endif
+                }
+            }

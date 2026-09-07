@@ -132,7 +132,7 @@ IRFujitsuAC ac_fujitsu(IR_TRAN_GPIO, ARRAH2E);
 IRsend ac_custom(IR_TRAN_GPIO);
 IRsend ac_general(IR_TRAN_GPIO);
 
-
+#define CONF_ACK_COOLDOWN_MS  3000
 
 /**
  * @brief Function that initializes the ir Transmitter setup.
@@ -1253,8 +1253,40 @@ void ir_recv_task(void *args)
     irrecv.setUnknownThreshold(12);
     irrecv.setTolerance(kTolerancePercentage);
     irrecv.enableIRIn();
+
+    static TickType_t    last_conf_ack_tick   = 0;
+    static bool          pending_conf_ack     = false;
+    static bool          pending_valid_signal = false;
+    static CommandStruct pending_conf_ack_data;
+    TickType_t           elapsed_ms           = 0;
+
     while (1)
     {
+        // ── Send pending conf ACK when cooldown expires ────────────────────
+        // No continue here — irrecv.decode() always runs so a sendable
+        // protocol can still be detected during cooldown
+        if (pending_conf_ack)
+        {
+            TickType_t now = xTaskGetTickCount();
+            elapsed_ms = (now - last_conf_ack_tick) * portTICK_PERIOD_MS;
+            if (elapsed_ms >= CONF_ACK_COOLDOWN_MS)
+            {
+                ESP_LOGI(IR_TAG, "Sending Conf ACK after cooldown (err=%d)",
+                    pending_conf_ack_data.errorcode);
+                pending_conf_ack      = false;
+                pending_valid_signal  = false;
+                last_conf_ack_tick    = xTaskGetTickCount();
+                elapsed_ms            = 0;
+#if (IS_GWY)
+                generate_ack(GWY_CONF_ACK, &pending_conf_ack_data);
+#else
+                send_ack_to_provisioner(NODE_CONF_ACK, &pending_conf_ack_data);
+#endif
+                irrecv.resume();
+                vTaskDelay(pdMS_TO_TICKS(50));  // let IR buffer clear after resume
+            }
+        }
+
         if (irrecv.decode(&results))
         {
             decode_type_t protocol = UNKNOWN;
@@ -1304,11 +1336,11 @@ void ir_recv_task(void *args)
                 continue;
             }
 
-            CommandStruct ack;
+            CommandStruct ack;    
+            memset(&ack, 0, sizeof(CommandStruct)); // zero initialize — prevents garbage fields over BLE
             /*AC Remote Configuration Process*/
-            if (!configured && !teaching_in_progress)
+            if (!configured && !teaching_in_progress && results.rawlen > 20)
             {
-                
                 ack.irProtocolNum = protocol;
 #if (IS_GWY)
                 ack.packetid = GWY_CONF_ACK;
@@ -1319,14 +1351,20 @@ void ir_recv_task(void *args)
 #endif
                 if (is_sendable_protocol(protocol))
                 {
-                    configured = true; 
+                    // Sendable implies decodeable — best case
+                    // Configure immediately, cancel any pending failure ACK, send SUCCESS
+                    configured           = true;
                     update_led_status();
-                    ir_protocol_num = protocol;
+                    ir_protocol_num      = protocol;
                     strcpy(ir_protocol, get_protocol_string(ir_protocol_num));
                     set_number_in_nvs_flash(IR_HANDLE, NVS_IR_PROTOCOL_KEY, ir_protocol_num, INT16_SIZE);
                     set_number_in_nvs_flash(GENERAL_HANDLE, NVS_CONFIGURED_KEY, 1, UINT8_SIZE);
 
-                    ack.errorcode = SUCCESS;
+                    ack.errorcode        = SUCCESS;
+                    last_conf_ack_tick   = xTaskGetTickCount();
+                    elapsed_ms           = 0;
+                    pending_conf_ack     = false;    // cancel any pending failure ACK
+                    pending_valid_signal = false;
 #if (IS_GWY)
                     generate_ack(GWY_CONF_ACK, &ack);
 #else
@@ -1336,32 +1374,38 @@ void ir_recv_task(void *args)
                     goto here;
                 }
 
-                led_set_state(LED_STATE_INVALID_OPERATION);
-
                 if (is_decodeable_protocol(protocol))
                 {
-                    ESP_LOGE(IR_TAG, "AC Remote Configuration Failed | Protocol is deocdeable-only");
+                    // Real AC remote but decodeable-only (not sendable)
+                    // Turn LED green immediately so user stops pressing remote
+                    // Store as pending — ACK sent after cooldown
+                    ESP_LOGE(IR_TAG, "AC Remote Configuration Failed | Protocol is decodeable-only");
                     ESP_LOGW(IR_TAG, "Move on to Teaching mode with error checking");
                     teaching_mode_t.errorCheckEnabled = 1;
-                    ack.errorcode = IR_PROTOCOL_DECODEABLE_ONLY;
-#if (IS_GWY)
-                    generate_ack(GWY_CONF_ACK, &ack);
-#else
-                    send_ack_to_provisioner(NODE_CONF_ACK, &ack);
-#endif
+                    ack.errorcode        = IR_PROTOCOL_DECODEABLE_ONLY;
+                    pending_valid_signal = true;                       // block IR during cooldown
+                    // led_set_state(LED_STATE_IR_SIGNAL_DETECTED);       // green immediately
                 }
                 else
                 {
+                    // Unknown / noise — do not change LED, keep receiving during cooldown
                     ESP_LOGE(IR_TAG, "AC Remote Configuration Failed | Protocol is neither decodeable nor sendable");
-                    ESP_LOGW(IR_TAG, "Move on to Teaching mode without error checking");
-                    ack.errorcode = IR_PROTOCOL_FULLY_UNSUPPORTED;
+                    ESP_LOGW(IR_TAG, "Suggestion: Use Teaching mode (ID:8) to configure this AC remote manually");
+                    ack.errorcode                     = IR_PROTOCOL_FULLY_UNSUPPORTED;
                     teaching_mode_t.errorCheckEnabled = 0;
-#if (IS_GWY)
-                    generate_ack(GWY_CONF_ACK, &ack);
-#else
-                    send_ack_to_provisioner(NODE_CONF_ACK, &ack);
-#endif
+                    pending_valid_signal              = false;          // keep receiving during cooldown
+                    led_set_state(LED_STATE_INVALID_OPERATION);
                 }
+
+                // Store latest data — top of while loop sends when cooldown expires
+                ESP_LOGD(IR_TAG, "Conf ACK queued (err=%d valid=%d)",
+                    ack.errorcode, pending_valid_signal);
+                pending_conf_ack = true;
+                memcpy(&pending_conf_ack_data, &ack, sizeof(CommandStruct));
+
+                // Start cooldown timer on very first signal ever
+                if (last_conf_ack_tick == 0)
+                    last_conf_ack_tick = xTaskGetTickCount();
             }
         here:
             yield();

@@ -9,6 +9,10 @@
 #define BLE_NODE_COMM_TIMEOUT_MS 20000
 #define BLE_RESP_BUFFER_LEN 200
 
+#define PROV_OWN_ADDR           0x0001
+#define GROUP_ACK_TIMEOUT_MS    10000
+#define MAX_PENDING_GROUP_CMDS  5
+
 /*Global Variables*/
 extern bool ble_initialized;
 
@@ -28,6 +32,12 @@ extern "C" {
 void send_ack_to_provisioner(uint16_t packetid, CommandStruct *ack);
 void send_teaching_mode_ack_to_provisioner();
 void send_manual_control_ack_to_provisioner();
+
+void ble_send_group_ac_control(CommandStruct *cmd);
+void handle_gwy_group_subscribe(CommandStruct *cmd);
+void handle_gwy_group_unsubscribe(CommandStruct *cmd);
+void handle_group_ac_control(CommandStruct *cmd);
+
 #ifdef __cplusplus
 }
 #endif

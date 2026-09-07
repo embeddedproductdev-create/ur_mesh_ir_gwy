@@ -7,7 +7,8 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
-#define PUBLISH_QUEUE_SIZE 10
+
+#define PUBLISH_QUEUE_SIZE 24
 #define COMMAND_QUEUE_SIZE 10
 #define BLE_RESP_QUEUE_SIZE 50
 
@@ -114,6 +115,7 @@ extern const char *DETECTED_TEMPERATURE_KEY;
 extern const char *BLE_ERROR_CODE_KEY;
 extern const char *MESSAGE_KEY;
 extern const char *RSSI_KEY;
+extern const char *GROUP_ADDR_KEY;
 
 extern char subscribe_topic[MQTT_TOPIC_NAME_LEN];
 extern char publish_topic[MQTT_TOPIC_NAME_LEN];
@@ -233,7 +235,12 @@ typedef enum
     ENDING_TEMPERATURE_INVALID_FORMAT,
     RESTART_INVALID_FORMAT,
     RESET_INVALID_FORMAT,
+    MISSING_GROUP_ADDR,
+    GROUP_ADDR_INVALID_FORMAT,
+    GROUP_ADDR_EXCEEDING_RANGE,
+    NODE_NOT_IN_GROUP,
 }error_codes;
+
 
 typedef enum
 {
@@ -249,10 +256,15 @@ typedef enum
 	GWY_TEACHING_MODE,
     GWY_TEACHING_MODE_CMD_SELECTION_PACKET,
 	GWY_DEBUG_INFO_PACKET,
-	MAX_GWY_PACKET_ID,
     GWY_GENERAL_PACKET, 
-    GWY_AC_CONTROL_ACK,        // 13 — ACK sent to cloud after GWY AC control
-
+    GWY_AC_CONTROL_ACK = 13,        // 13 — ACK sent to cloud after GWY AC control
+    GWY_GROUP_SUB_PACKET,                    // 14 — GWY subscribes itself
+    GWY_GROUP_UNSUB_PACKET,                  // 15 — GWY unsubscribes itself
+    GWY_GROUP_SUB_ACK,                       // 16 — subscribe ACK to cloud
+    GWY_GROUP_UNSUB_ACK,                     // 17 — unsubscribe ACK to cloud
+    GWY_GROUP_TABLE_PACKET,                  // 18 - Get group table list from gateway
+	MAX_GWY_PACKET_ID,
+    
 	/* NODE PACKETS */
 	NODE_PROV_PACKET = 100,
 	NODE_CONF_ACK,
@@ -265,10 +277,17 @@ typedef enum
 	NODE_TEACHING_MODE,
     NODE_TEACHING_MODE_CMD_SELECTION_PACKET,
 	NODE_DEBUG_INFO_PACKET,
-	MAX_NODE_PACKET_ID,
     NODE_GENERAL_PACKET,
-    NODE_AC_CONTROL_ACK,       // 113 — ACK sent to cloud after NODE AC control
-    
+    NODE_AC_CONTROL_ACK = 113,       // 113 — ACK sent to cloud after NODE AC control
+    NODE_GROUP_SUB_PACKET,                   // 114 — cloud wants node to subscribe
+    NODE_GROUP_UNSUB_PACKET,                 // 115 — cloud wants node to unsubscribe
+    NODE_GROUP_SUB_ACK,                      // 116 — node subscribed ACK
+    NODE_GROUP_UNSUB_ACK,                    // 117 — node unsubscribed ACK
+    NODE_GROUP_AC_CONTROL_PACKET,            // 118 — group AC control
+    NODE_GROUP_AC_CONTROL_IMMEDIATE_ACK,     // 119 — immediate ACK: command dispatched to N nodes
+    NODE_GROUP_AC_CONTROL_SUMMARY_ACK,       // 120 — summary ACK: N/M nodes confirmed
+	MAX_NODE_PACKET_ID,
+
     /*MISC*/
     TEST_PACKET = 999
 }mqtt_packets;
@@ -288,6 +307,8 @@ typedef struct
     int16_t irProtocolNum;             // 2 bytes
     uint16_t msgseqno;                 // 2 bytes
     uint16_t elemaddr;                 // 2 bytes
+    uint16_t groupaddr;                // 2 bytes
+    uint16_t group_cmd_seq;            // 2 bytes ← ADD
     uint16_t ontimer;                  // 2 bytes
     uint16_t offtimer;                 // 2 bytes
     uint16_t publishPeriodSec;         // 2 bytes
@@ -320,6 +341,8 @@ typedef struct
     char mode_str[MODE_STR_LEN];       // Variable size, but align at the end
     char deviceName[SERIAL_NO_LEN];    // 16 bytes
 } CommandStruct;
+
+#include "group_table.h"   
 
 
 typedef struct
@@ -430,6 +453,13 @@ void construct_general_ack(error_codes err);
 void generate_node_teaching_mode_ack(teaching_mode *node_teaching_mode_t);
 void generate_node_manual_ac_control_ack(manual_control *node_ac_manual_control_t);
 void enqueue_for_publish(char *ack_json);
+
+void handle_group_ac_control(CommandStruct *cmd);
+void handle_gwy_group_unsubscribe(CommandStruct *cmd);
+void handle_gwy_group_subscribe(CommandStruct *cmd);
+void handle_group_table_query(CommandStruct *cmd); 
+
+void normalize_mode(const char *raw_mode, char *mode_str_out, uint8_t *mode_num_out);
 
 #ifdef __cplusplus
 }
