@@ -47,13 +47,14 @@
 /*===========================================================
  * Constants shared with the node's common_types.h
  *===========================================================*/
-#define RS485_DEVICE_LABEL_LEN       20   /* must match node's DEVICE_LABEL_LEN */
+#define RS485_DEVICE_LABEL_LEN       24   /* must match node's DEVICE_LABEL_LEN */
 #define RS485_MAX_PARAMS_PER_DEVICE  30   /* must match node's MAX_PARAMS_PER_DEVICE */
 #define RS485_SERIAL_NO_LEN          16   /* must match node's SERIAL_NO_LEN (== gateway's SERIAL_NO_LEN) */
 #define RS485_GPIO_CHANNEL_COUNT     8
  
-#define NODE_TYPE_IR_AC   0x01
-#define NODE_TYPE_RS485   0x02
+#define NODE_TYPE_IR_AC   0x00
+#define NODE_TYPE_RS485   0x01
+#define NODE_TYPE_GATEWAY 0x02
  
 /*===========================================================
  * Register data type — how the node decodes raw register bytes.
@@ -181,7 +182,7 @@ typedef struct
     uint16_t elemaddr;
     uint8_t  node_type;
     uint8_t  channel_mask;
-    uint8_t  direction;
+    uint8_t  direction_mask; /* bit i = 1 for output, 0 for input on channel i */
     uint8_t  pull_up_mask;    /* bit i = enable internal pull-up on channel i   */
     uint8_t  pull_down_mask;  /* bit i = enable internal pull-down on channel i */
     char     deviceName[RS485_SERIAL_NO_LEN];
@@ -198,7 +199,7 @@ typedef struct
     uint16_t elemaddr;
     uint8_t  node_type;
     uint8_t  channel_mask;
-    uint8_t  level;
+    uint8_t  level_mask; /* bit i = 1 for high, 0 for low on channel i */
     char     deviceName[RS485_SERIAL_NO_LEN];
 } GpioSetCmd;
  
@@ -285,6 +286,74 @@ typedef struct
     char     deviceName[RS485_SERIAL_NO_LEN];
 } SumanAcControlCmd;
  
+/*===========================================================
+ * Node -> Gateway -> Cloud: Suman AC control ACK
+ * NODE_SUMAN_AC_CONTROL_ACK = 163
+ *===========================================================*/
+typedef struct
+{
+    uint16_t    packetid;
+    uint16_t    msgseqno;
+    uint16_t    elemaddr;
+    uint8_t     node_type;
+    uint8_t     slave_addr;
+    uint8_t     write_mask;        /* echoed from command */
+
+    uint16_t    pc_set_temp;
+    uint16_t    pc_operating_mode;
+    uint16_t    control_option;
+    uint16_t    handset_ctrl_time;
+    uint16_t    ctrl_set_temp;
+    uint16_t    ctrl_operating_mode;
+    uint16_t    fault_reset_active;
+    uint16_t    return_air_temp;
+    uint16_t    compressor_status;
+    uint16_t    fan_status;
+    uint16_t    alarm_status;
+    uint16_t    system_fault;
+    uint16_t    sensor_fault;
+    uint16_t    comp1_fault;
+    uint16_t    comp2_fault;
+
+    int8_t      errorcode;
+    char        deviceName[RS485_SERIAL_NO_LEN];
+} SumanAcControlAck;
+
+/*===========================================================
+ * Cloud -> Gateway -> Node: Suman AC config command
+ * NODE_SUMAN_AC_CONFIG_PACKET = 159
+ *===========================================================*/
+typedef struct
+{
+    uint16_t              packetid;
+    uint16_t              msgseqno;
+    uint16_t              elemaddr;
+    uint8_t               node_type;
+    uint8_t               slave_addr;
+    uint8_t               action;      /* meter_config_action_t value */
+    char                  label[RS485_DEVICE_LABEL_LEN];
+    char                  deviceName[RS485_SERIAL_NO_LEN];
+} SumanAcConfigCmd;
+
+/*===========================================================
+ * Node -> Gateway -> Cloud: Suman AC config ACK
+ * NODE_SUMAN_AC_CONFIG_ACK = 164
+ *===========================================================*/
+typedef struct
+{
+    uint16_t    packetid;
+    uint16_t    msgseqno;
+    uint16_t    elemaddr;
+    uint8_t     node_type;
+    uint8_t     slave_addr;
+    uint8_t     action;            /* echoed from command */
+    char        label[RS485_DEVICE_LABEL_LEN];
+    uint8_t     total_devices;
+    int8_t      errorcode;
+    char        deviceName[RS485_SERIAL_NO_LEN];
+} SumanAcConfigAck;
+
+
 #endif /* RS485_TYPES_H */
  
 

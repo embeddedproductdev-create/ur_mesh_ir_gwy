@@ -47,6 +47,9 @@ void rs485_relay_publish_gpio_status(GpioStatusPkt *pkt);
 /** @brief Publish a node's Suman AC controller status (157) to MQTT as-is. */
 void rs485_relay_publish_suman_ac_status(SumanAcStatusPkt *pkt);
  
+void rs485_relay_publish_suman_ac_config_ack(SumanAcConfigAck *pkt);
+void rs485_relay_publish_suman_ac_control_ack(SumanAcControlAck *pkt);
+
 /**
  * @brief Scan in-flight RS485 command trackers for timeout. Call once per
  *        maintainMQTTConnection() loop iteration, same cadence as the

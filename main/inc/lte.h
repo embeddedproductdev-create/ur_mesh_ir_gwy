@@ -8,8 +8,8 @@
 #include "freertos/task.h"
 
 
-#define PUBLISH_QUEUE_SIZE 24
-#define COMMAND_QUEUE_SIZE 10
+#define PUBLISH_QUEUE_SIZE 48
+#define COMMAND_QUEUE_SIZE 24
 #define BLE_RESP_QUEUE_SIZE 50
 
 #define BAUD_RATE 115200
@@ -116,6 +116,7 @@ extern const char *BLE_ERROR_CODE_KEY;
 extern const char *MESSAGE_KEY;
 extern const char *RSSI_KEY;
 extern const char *GROUP_ADDR_KEY;
+extern const char *TTL_KEY;
 
 extern char subscribe_topic[MQTT_TOPIC_NAME_LEN];
 extern char publish_topic[MQTT_TOPIC_NAME_LEN];
@@ -235,9 +236,14 @@ typedef enum
     ENDING_TEMPERATURE_INVALID_FORMAT,
     RESTART_INVALID_FORMAT,
     RESET_INVALID_FORMAT,
+    MISSING_ELEMENT_ADDR_LIST,
+    ELEMENT_ADDR_LIST_EMPTY,
+    ELEMENT_ADDR_LIST_TOO_LARGE,
     MISSING_GROUP_ADDR,
     GROUP_ADDR_INVALID_FORMAT,
     GROUP_ADDR_EXCEEDING_RANGE,
+    MISSING_TTL,
+    TTL_INVALID_RANGE,
     NODE_NOT_IN_GROUP,
     /* RS485 relay validation (gateway-side only — NODE_METER_CONFIG_PACKET,
        NODE_GPIO_CONFIG_PACKET, NODE_GPIO_SET_PACKET, NODE_SUMAN_AC_CONTROL_PACKET) */
@@ -293,6 +299,11 @@ typedef enum
     GWY_GROUP_SUB_ACK,                       // 16 — subscribe ACK to cloud
     GWY_GROUP_UNSUB_ACK,                     // 17 — unsubscribe ACK to cloud
     GWY_GROUP_TABLE_PACKET,                  // 18 - Get group table list from gateway
+    GWY_MULTI_AC_CONTROL_PACKET,             // 19
+    GWY_MULTI_AC_CONTROL_IMMEDIATE_ACK,      // 20
+    GWY_MULTI_AC_CONTROL_SUMMARY_ACK,        // 21
+    GWY_NODE_TTL_PACKET,                          // 22 — cloud sends to set TTL
+    GWY_NODE_TTL_ACK,                             // 23 — gateway responds with result
 	MAX_GWY_PACKET_ID,
     
 	/* NODE PACKETS */
@@ -328,11 +339,13 @@ typedef enum
     NODE_GPIO_STATUS_PACKET             = 156,
     NODE_SUMAN_AC_STATUS_PACKET         = 157,
     NODE_SUMAN_AC_CONTROL_PACKET        = 158,
+    NODE_SUMAN_AC_CONFIG_PACKET         = 159,
     NODE_METER_CONFIG_ACK               = 160,
     NODE_GPIO_CONFIG_ACK                = 161,
     NODE_GPIO_SET_ACK                   = 162,
     NODE_SUMAN_AC_CONTROL_ACK           = 163,
-    MAX_RS485_PACKET_ID,
+    NODE_SUMAN_AC_CONFIG_ACK            = 164,
+    MAX_RS485_PACKET_ID                 = 165,
     /*MISC*/
     TEST_PACKET = 999
 }mqtt_packets;
@@ -353,6 +366,7 @@ typedef struct
     uint16_t msgseqno;                 // 2 bytes
     uint16_t elemaddr;                 // 2 bytes
     uint16_t groupaddr;                // 2 bytes
+    uint8_t ttl;
     uint16_t group_cmd_seq;            // 2 bytes ← ADD
     uint16_t ontimer;                  // 2 bytes
     uint16_t offtimer;                 // 2 bytes
@@ -504,7 +518,11 @@ void handle_gwy_group_unsubscribe(CommandStruct *cmd);
 void handle_gwy_group_subscribe(CommandStruct *cmd);
 void handle_group_table_query(CommandStruct *cmd); 
 
+void handle_multi_ac_control(CommandStruct *cmd, uint16_t *addrs, uint8_t count);
+
 void normalize_mode(const char *raw_mode, char *mode_str_out, uint8_t *mode_num_out);
+
+void handle_set_node_ttl(CommandStruct *cmd);
 
 #ifdef __cplusplus
 }

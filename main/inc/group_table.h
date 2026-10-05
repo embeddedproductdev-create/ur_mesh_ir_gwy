@@ -56,6 +56,10 @@ typedef struct
 // One tracker per in-flight group AC control command.
 // Gateway waits for ACKs from all subscribed nodes before sending summary ACK.
 // ============================================================================
+typedef enum {
+    TRACKER_TYPE_GROUP    = 0,   // BLE Mesh group address control
+    TRACKER_TYPE_MULTICAST = 1,  // Multi-unicast ad-hoc control
+} tracker_type_t;
 
 typedef struct GroupAckTracker_tag
 {
@@ -68,6 +72,7 @@ typedef struct GroupAckTracker_tag
     uint8_t     failed_count;                       // number of nodes that failed/timed out
     TickType_t  start_tick;                         // when group command was sent
     CommandStruct cmd;                              // original command for summary ACK
+    tracker_type_t  type;  
     struct GroupAckTracker_tag *next;               // linked list pointer
 } GroupAckTracker_t;
 

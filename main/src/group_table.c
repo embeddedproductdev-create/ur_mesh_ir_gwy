@@ -327,6 +327,7 @@ GroupAckTracker_t *group_tracker_alloc(GroupEntry_t *entry,
     }
 
     memset(tracker, 0, sizeof(GroupAckTracker_t));
+    tracker->type = TRACKER_TYPE_GROUP;   // default
     group_cmd_seq_counter++;
 
     tracker->seq            = group_cmd_seq_counter;
@@ -459,9 +460,10 @@ void group_tracker_check_timeouts(void)
 
         if (elapsed_ms >= GROUP_ACK_TIMEOUT_MS)
         {
-            ESP_LOGW(GROUP_TAG, "Tracker [seq=%d] TIMEOUT: %d/%d ACKs %d failed",
-                curr->seq, curr->received, curr->expected, curr->failed_count);
-            generate_ack(NODE_GROUP_AC_CONTROL_SUMMARY_ACK, &curr->cmd);
+            if (curr->type == TRACKER_TYPE_MULTICAST)
+                generate_ack(GWY_MULTI_AC_CONTROL_SUMMARY_ACK, &curr->cmd);
+            else
+                generate_ack(NODE_GROUP_AC_CONTROL_SUMMARY_ACK, &curr->cmd);
             group_tracker_free(curr);
         }
 

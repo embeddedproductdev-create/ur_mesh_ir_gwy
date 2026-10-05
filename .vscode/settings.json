@@ -79,7 +79,6 @@
     "streambuf": "cpp"
   },
   "idf.flashType": "UART",
-  "idf.portWin": "COM3",
   "idf.adapterTargetName": "esp32s3",
   "C_Cpp.errorSquiggles": "disabled",
   "idf.openOcdConfigs": [
@@ -92,5 +91,6 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=d:\\Freelance\\Unimation\\ble_mesh\\ble_mesh_ur\\build"
-  ]
+  ],
+  "idf.port": "COM3"
 }

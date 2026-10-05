@@ -60,6 +60,8 @@
    (1024, from lte.h) stays fine for the small generic ACK. */
 #define RS485_JSON_BUFFER_LEN 4096
  
+static void handle_suman_ac_config(cJSON *json_obj, uint16_t msgseqno);
+
 /*===========================================================
  * Small validation helpers — mirror the style of error_check_json()
  * in lte.c, but write into gateway-local out-params instead of the
@@ -161,6 +163,7 @@ static uint16_t ack_id_for_command(mqtt_packets cmd_packetid)
         case NODE_GPIO_CONFIG_PACKET:       return NODE_GPIO_CONFIG_ACK;
         case NODE_GPIO_SET_PACKET:          return NODE_GPIO_SET_ACK;
         case NODE_SUMAN_AC_CONTROL_PACKET:  return NODE_SUMAN_AC_CONTROL_ACK;
+        case NODE_SUMAN_AC_CONFIG_PACKET:   return NODE_SUMAN_AC_CONFIG_ACK;
         default:                            return cmd_packetid;
     }
 }
@@ -201,8 +204,10 @@ typedef struct rs485_pending_cmd
     union
     {
         struct { uint8_t slave_addr; uint8_t action; char label[RS485_DEVICE_LABEL_LEN]; uint8_t reg_count; } meter_cfg;
-        struct { uint8_t channel_mask; uint8_t direction; uint8_t pull_up_mask; uint8_t pull_down_mask; } gpio_cfg;
+        struct { uint8_t channel_mask; uint8_t direction_mask; uint8_t pull_up_mask; uint8_t pull_down_mask; } gpio_cfg;
         struct { uint8_t channel_mask; uint8_t level; } gpio_set;
+        struct { uint8_t slave_addr; uint8_t write_mask; } suman_ctrl;
+        struct { uint8_t slave_addr; uint8_t action; char label[RS485_DEVICE_LABEL_LEN]; } suman_cfg;
     } req;
     struct rs485_pending_cmd *next;
 } rs485_pending_cmd_t;
@@ -308,7 +313,7 @@ static void send_gpio_config_error_ack(uint16_t msgseqno, const GpioConfigCmd *c
     jwObj_int(&jwc, "ElementAddr", cmd->elemaddr);
     jwObj_int(&jwc, "NodeType", cmd->node_type);
     jwObj_int(&jwc, "ChannelMask", cmd->channel_mask);
-    jwObj_int(&jwc, "Direction", cmd->direction);
+    jwObj_int(&jwc, "Direction", cmd->direction_mask);
     jwObj_int(&jwc, "PullUp", cmd->pull_up_mask);
     jwObj_int(&jwc, "PullDown", cmd->pull_down_mask);
     jwObj_string(&jwc, "ErrorSource", "GATEWAY");
@@ -337,7 +342,7 @@ static void send_gpio_set_error_ack(uint16_t msgseqno, const GpioSetCmd *cmd, er
     jwObj_int(&jwc, "ElementAddr", cmd->elemaddr);
     jwObj_int(&jwc, "NodeType", cmd->node_type);
     jwObj_int(&jwc, "ChannelMask", cmd->channel_mask);
-    jwObj_int(&jwc, "Level", cmd->level);
+    jwObj_int(&jwc, "Level", cmd->level_mask);
     jwObj_string(&jwc, "ErrorSource", "GATEWAY");
     jwObj_int(&jwc, "ErrorCode", err);
     jwObj_string(&jwc, "ErrorMsg", get_error_code_name(err));
@@ -510,7 +515,7 @@ static void handle_gpio_config(cJSON *json_obj, uint16_t msgseqno)
     if ((err = get_required_int(json_obj, "Direction", 0, 255,
             MISSING_DIRECTION, DIRECTION_INVALID_FORMAT, &direction)) != SUCCESS)
         goto reject;
-    cmd.direction = (uint8_t)direction;
+    cmd.direction_mask = (uint8_t)direction;
  
     if ((err = get_required_int(json_obj, "PullUp", 0, 255,
             MISSING_PULL, PULL_INVALID_FORMAT, &pull_up)) != SUCCESS)
@@ -525,14 +530,14 @@ static void handle_gpio_config(cJSON *json_obj, uint16_t msgseqno)
     get_optional_str(json_obj, "NodeSerNo", cmd.deviceName, sizeof(cmd.deviceName));
  
     ESP_LOGI(RS485_TAG, "Relaying GPIO config to node 0x%04x: mask=0x%02x dir=0x%02x pullup=0x%02x pulldown=0x%02x",
-        cmd.elemaddr, cmd.channel_mask, cmd.direction, cmd.pull_up_mask, cmd.pull_down_mask);
+        cmd.elemaddr, cmd.channel_mask, cmd.direction_mask, cmd.pull_up_mask, cmd.pull_down_mask);
     send_rs485_struct_to_node(cmd.elemaddr, &cmd, sizeof(cmd));
  
     rs485_pending_cmd_t *p = pending_alloc(NODE_GPIO_CONFIG_ACK, msgseqno, cmd.elemaddr);
     if (p != NULL)
     {
         p->req.gpio_cfg.channel_mask   = cmd.channel_mask;
-        p->req.gpio_cfg.direction      = cmd.direction;
+        p->req.gpio_cfg.direction_mask      = cmd.direction_mask;
         p->req.gpio_cfg.pull_up_mask   = cmd.pull_up_mask;
         p->req.gpio_cfg.pull_down_mask = cmd.pull_down_mask;
     }
@@ -574,19 +579,19 @@ static void handle_gpio_set(cJSON *json_obj, uint16_t msgseqno)
     if ((err = get_required_int(json_obj, "Level", 0, 255,
             MISSING_LEVEL, LEVEL_INVALID_FORMAT, &level)) != SUCCESS)
         goto reject;
-    cmd.level = (uint8_t)level;
+    cmd.level_mask = (uint8_t)level;
  
     get_optional_str(json_obj, "NodeSerNo", cmd.deviceName, sizeof(cmd.deviceName));
  
     ESP_LOGI(RS485_TAG, "Relaying GPIO set to node 0x%04x: mask=0x%02x level=0x%02x",
-        cmd.elemaddr, cmd.channel_mask, cmd.level);
+        cmd.elemaddr, cmd.channel_mask, cmd.level_mask);
     send_rs485_struct_to_node(cmd.elemaddr, &cmd, sizeof(cmd));
  
     rs485_pending_cmd_t *p = pending_alloc(NODE_GPIO_SET_ACK, msgseqno, cmd.elemaddr);
     if (p != NULL)
     {
         p->req.gpio_set.channel_mask = cmd.channel_mask;
-        p->req.gpio_set.level        = cmd.level;
+        p->req.gpio_set.level        = cmd.level_mask;
     }
     return;
  
@@ -672,6 +677,15 @@ static void handle_suman_ac_control(cJSON *json_obj, uint16_t msgseqno)
  
     ESP_LOGI(RS485_TAG, "Relaying Suman AC control to node 0x%04x: write_mask=0x%02x",
         cmd.elemaddr, cmd.write_mask);
+
+    rs485_pending_cmd_t *p = pending_alloc(NODE_SUMAN_AC_CONTROL_ACK,
+                                            msgseqno, cmd.elemaddr);
+    if (p)
+    {
+        p->req.suman_ctrl.slave_addr = cmd.slave_addr;
+        p->req.suman_ctrl.write_mask = cmd.write_mask;
+    }
+
     send_rs485_struct_to_node(cmd.elemaddr, &cmd, sizeof(cmd));
     return;
  
@@ -707,6 +721,7 @@ void rs485_relay_handle_cloud_command(cJSON *json_obj, mqtt_packets packetid)
         case NODE_GPIO_CONFIG_PACKET:        handle_gpio_config(json_obj, msgseqno);        break;
         case NODE_GPIO_SET_PACKET:           handle_gpio_set(json_obj, msgseqno);           break;
         case NODE_SUMAN_AC_CONTROL_PACKET:   handle_suman_ac_control(json_obj, msgseqno);   break;
+        case NODE_SUMAN_AC_CONFIG_PACKET:    handle_suman_ac_config(json_obj, msgseqno);    break;
         default:
             ESP_LOGE(RS485_TAG, "rs485_relay_handle_cloud_command called with unexpected packetid=%d", packetid);
             break;
@@ -742,6 +757,25 @@ void rs485_relay_handle_node_ack(RS485CmdStruct *ack)
     {
         switch (ack->packetid)
         {
+            case NODE_HEARTBEAT_ACK:
+                jwObj_int(&jwc,    "MajVersion",       ack->majversion);
+                jwObj_int(&jwc,    "MinVersion",       ack->minversion);
+                jwObj_int(&jwc,    "PatchVersion",     ack->patchversion);
+                jwObj_int(&jwc,    "PublishPeriodSec", ack->publishPeriodSec);
+                jwObj_double(&jwc, "UptimeHrs",        ack->deviceUpTimeHrs);
+                jwObj_int(&jwc,    "Provisioned",      ack->provisioned);
+                break;
+            case NODE_HEARTBEAT_PUB_CONF_PACKET:
+            case NODE_RECONF_PACKET:
+                jwObj_int(&jwc, "PublishPeriodSec", ack->publishPeriodSec);
+                break;
+            case NODE_CONF_ACK:
+                jwObj_int(&jwc, "Provisioned", ack->provisioned);
+                break;
+            case NODE_PROV_PACKET:
+                jwObj_int(&jwc, "NodeType", ack->node_type);
+                break;
+
             case NODE_METER_CONFIG_ACK:
                 jwObj_int(&jwc, "SlaveAddr", p->req.meter_cfg.slave_addr);
                 jwObj_string(&jwc, "Action", (char *)meter_action_name(p->req.meter_cfg.action));
@@ -750,7 +784,7 @@ void rs485_relay_handle_node_ack(RS485CmdStruct *ack)
                 break;
             case NODE_GPIO_CONFIG_ACK:
                 jwObj_int(&jwc, "ChannelMask", p->req.gpio_cfg.channel_mask);
-                jwObj_int(&jwc, "Direction", p->req.gpio_cfg.direction);
+                jwObj_int(&jwc, "Direction", p->req.gpio_cfg.direction_mask);
                 jwObj_int(&jwc, "PullUp", p->req.gpio_cfg.pull_up_mask);
                 jwObj_int(&jwc, "PullDown", p->req.gpio_cfg.pull_down_mask);
                 break;
@@ -820,13 +854,22 @@ void rs485_relay_check_timeouts(void)
                         break;
                     case NODE_GPIO_CONFIG_ACK:
                         jwObj_int(&jwc, "ChannelMask", curr->req.gpio_cfg.channel_mask);
-                        jwObj_int(&jwc, "Direction", curr->req.gpio_cfg.direction);
+                        jwObj_int(&jwc, "Direction", curr->req.gpio_cfg.direction_mask);
                         jwObj_int(&jwc, "PullUp", curr->req.gpio_cfg.pull_up_mask);
                         jwObj_int(&jwc, "PullDown", curr->req.gpio_cfg.pull_down_mask);
                         break;
                     case NODE_GPIO_SET_ACK:
                         jwObj_int(&jwc, "ChannelMask", curr->req.gpio_set.channel_mask);
                         jwObj_int(&jwc, "Level", curr->req.gpio_set.level);
+                        break;
+                    case NODE_SUMAN_AC_CONTROL_ACK:
+                        jwObj_int(&jwc, "SlaveAddr",  curr->req.suman_ctrl.slave_addr);
+                        jwObj_int(&jwc, "WriteMask",  curr->req.suman_ctrl.write_mask);
+                        break;
+                    case NODE_SUMAN_AC_CONFIG_ACK:
+                        jwObj_int(&jwc,    "SlaveAddr", curr->req.suman_cfg.slave_addr);
+                        jwObj_string(&jwc, "Action",    (char *)meter_action_name(curr->req.suman_cfg.action));
+                        jwObj_string(&jwc, "Label",     curr->req.suman_cfg.label);
                         break;
                     default:
                         break;
@@ -977,4 +1020,141 @@ void rs485_relay_publish_suman_ac_status(SumanAcStatusPkt *pkt)
     enqueue_for_publish(buffer);
 }
  
+void rs485_relay_publish_suman_ac_config_ack(SumanAcConfigAck *pkt)
+{
+    char *buffer = (char *)malloc(sizeof(char) * RS485_JSON_BUFFER_LEN);
+    if (!buffer) { ESP_LOGE(RS485_TAG, "%s() - malloc failed", __func__); return; }
+
+    const char *action_str = (pkt->action == 2) ? "REMOVE" :
+                             (pkt->action == 1) ? "UPDATE" : "ADD";
+
+    jWriteControl_t jwc;
+    jwOpen(&jwc, buffer, RS485_JSON_BUFFER_LEN, JW_OBJECT, 1);
+    jwObj_int(&jwc,    "JsonPacketID",  pkt->packetid);
+    jwObj_int(&jwc,    "MsgSeqNo",      pkt->msgseqno);
+    jwObj_string(&jwc, "GwySerNo",      serialNoStr);
+    jwObj_string(&jwc, "NodeSerNo",     pkt->deviceName);
+    jwObj_int(&jwc,    "ElementAddr",   pkt->elemaddr);
+    jwObj_int(&jwc,    "NodeType",      pkt->node_type);
+    jwObj_int(&jwc,    "SlaveAddr",     pkt->slave_addr);
+    jwObj_string(&jwc, "Action",        action_str);
+    jwObj_string(&jwc, "Label",         pkt->label);
+    jwObj_int(&jwc,    "TotalDevices",  pkt->total_devices);
+    jwObj_int(&jwc,    "ErrorCode",     pkt->errorcode);
+    jwObj_string(&jwc, "ErrorMsg",      get_error_code_name(pkt->errorcode));
+    jwEnd(&jwc);
+    jwClose(&jwc);
+    
+    rs485_pending_cmd_t *p = pending_find_by_seq(pkt->msgseqno);
+    enqueue_for_publish(buffer);
+    if (p) pending_free(p);
+}
+
+void rs485_relay_publish_suman_ac_control_ack(SumanAcControlAck *pkt)
+{
+    char *buffer = (char *)malloc(sizeof(char) * RS485_JSON_BUFFER_LEN);
+    if (!buffer) { ESP_LOGE(RS485_TAG, "%s() - malloc failed", __func__); return; }
+
+    jWriteControl_t jwc;
+    jwOpen(&jwc, buffer, RS485_JSON_BUFFER_LEN, JW_OBJECT, 1);
+    jwObj_int(&jwc,    "JsonPacketID",      pkt->packetid);
+    jwObj_int(&jwc,    "MsgSeqNo",          pkt->msgseqno);
+    jwObj_string(&jwc, "GwySerNo",          serialNoStr);
+    jwObj_string(&jwc, "NodeSerNo",         pkt->deviceName);
+    jwObj_int(&jwc,    "ElementAddr",       pkt->elemaddr);
+    jwObj_int(&jwc,    "NodeType",          pkt->node_type);
+    jwObj_int(&jwc,    "SlaveAddr",         pkt->slave_addr);
+    jwObj_int(&jwc,    "WriteMask",         pkt->write_mask);
+    jwObj_int(&jwc,    "PcSetTemp",         pkt->pc_set_temp);
+    jwObj_int(&jwc,    "PcOperatingMode",   pkt->pc_operating_mode);
+    jwObj_int(&jwc,    "ControlOption",     pkt->control_option);
+    jwObj_int(&jwc,    "HandsetCtrlTime",   pkt->handset_ctrl_time);
+    jwObj_int(&jwc,    "CtrlSetTemp",       pkt->ctrl_set_temp);
+    jwObj_int(&jwc,    "CtrlOperatingMode", pkt->ctrl_operating_mode);
+    jwObj_int(&jwc,    "FaultResetActive",  pkt->fault_reset_active);
+    jwObj_int(&jwc,    "ReturnAirTemp",     pkt->return_air_temp);
+    jwObj_int(&jwc,    "CompressorStatus",  pkt->compressor_status);
+    jwObj_int(&jwc,    "FanStatus",         pkt->fan_status);
+    jwObj_int(&jwc,    "AlarmStatus",       pkt->alarm_status);
+    jwObj_int(&jwc,    "SystemFault",       pkt->system_fault);
+    jwObj_int(&jwc,    "SensorFault",       pkt->sensor_fault);
+    jwObj_int(&jwc,    "Comp1Fault",        pkt->comp1_fault);
+    jwObj_int(&jwc,    "Comp2Fault",        pkt->comp2_fault);
+    jwObj_int(&jwc,    "ErrorCode",         pkt->errorcode);
+    jwObj_string(&jwc, "ErrorMsg",          get_error_code_name(pkt->errorcode));
+    jwEnd(&jwc);
+    jwClose(&jwc);
+
+    rs485_pending_cmd_t *p = pending_find_by_seq(pkt->msgseqno);
+    enqueue_for_publish(buffer);
+    if (p) pending_free(p);
+}
+
+static void handle_suman_ac_config(cJSON *json_obj, uint16_t msgseqno)
+{
+    SumanAcConfigCmd cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.packetid  = NODE_SUMAN_AC_CONFIG_PACKET;
+    cmd.msgseqno  = msgseqno;
+    cmd.node_type = NODE_TYPE_RS485;
+
+    /* SlaveAddr */
+    cJSON *slave = cJSON_GetObjectItem(json_obj, "SlaveAddr");
+    if (!slave || !cJSON_IsNumber(slave))
+    {
+        send_gateway_error_ack(NODE_SUMAN_AC_CONFIG_ACK, msgseqno,
+                                MISSING_SLAVE_ADDR);
+        return;
+    }
+    cmd.slave_addr = (uint8_t)slave->valueint;
+
+    /* Action */
+    cJSON *action = cJSON_GetObjectItem(json_obj, "Action");
+    if (!action || !cJSON_IsString(action))
+    {
+        send_gateway_error_ack(NODE_SUMAN_AC_CONFIG_ACK, msgseqno, FAILURE);
+        return;
+    }
+    if      (strcmp(action->valuestring, "ADD")    == 0) cmd.action = 0;
+    else if (strcmp(action->valuestring, "UPDATE") == 0) cmd.action = 1;
+    else if (strcmp(action->valuestring, "REMOVE") == 0) cmd.action = 2;
+    else
+    {
+        send_gateway_error_ack(NODE_SUMAN_AC_CONFIG_ACK, msgseqno, FAILURE);
+        return;
+    }
+
+    /* Label */
+    cJSON *label = cJSON_GetObjectItem(json_obj, "Label");
+    if (label && cJSON_IsString(label))
+        strncpy(cmd.label, label->valuestring, RS485_DEVICE_LABEL_LEN - 1);
+
+    /* DeviceName */
+    cJSON *devname = cJSON_GetObjectItem(json_obj, "NodeSerNo");
+    if (devname && cJSON_IsString(devname))
+        strncpy(cmd.deviceName, devname->valuestring, RS485_SERIAL_NO_LEN - 1);
+
+    /* ElementAddr */
+    cJSON *elemaddr_item = cJSON_GetObjectItem(json_obj, "ElementAddr");
+    if (!elemaddr_item || !cJSON_IsNumber(elemaddr_item))
+    {
+        send_gateway_error_ack(NODE_SUMAN_AC_CONFIG_ACK, msgseqno,
+                               MISSING_ELEMENT_ADDR);
+        return;
+    }
+    cmd.elemaddr = (uint16_t)elemaddr_item->valueint;
+
+    rs485_pending_cmd_t *p = pending_alloc(NODE_SUMAN_AC_CONFIG_ACK,
+                                            msgseqno, cmd.elemaddr);
+    if (p)
+    {
+        p->req.suman_cfg.slave_addr = cmd.slave_addr;
+        p->req.suman_cfg.action     = cmd.action;
+        strncpy(p->req.suman_cfg.label, cmd.label,
+                sizeof(p->req.suman_cfg.label) - 1);
+    }
+
+    send_rs485_struct_to_node(cmd.elemaddr, &cmd, sizeof(SumanAcConfigCmd));    
+}
+
 #endif /* IS_GWY */

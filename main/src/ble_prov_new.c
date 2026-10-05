@@ -32,6 +32,8 @@
 #include <lte.h>
 #include <led.h>
 #include "group_table.h"
+#include "rs485_types.h"
+#include "rs485_relay.h"
 
 bool ble_initialized = false;
 
@@ -136,11 +138,33 @@ static esp_ble_mesh_prov_t provision = {
 + * ble_new.h. Purely gateway-local storage: lets generate_ack() add
 + * "NodeType" to the NODE_PROV_PACKET ack without needing a wire-struct
 + * change to CommandStruct, which every node type (including existing
-+ * IR-AC nodes) already shares.
-+ *===========================================================*/
-#define DEV_UUID_NODE_TYPE_OFFSET  8   /* uuid[0:1]=prefix, [2:7]=MAC, [8]=node type */
++ * IR-AC nodes) already shares. NVS-persisted under GENERAL_HANDLE —
++ * same pattern as group_table_save()/group_table_load() in
++ * group_table.c, just reusing the existing general-purpose NVS
++ * namespace instead of a new partition.
+  *===========================================================*/
+ #define DEV_UUID_NODE_TYPE_OFFSET  8   /* uuid[0:1]=prefix, [2:7]=MAC, [8]=node type */
 
-static node_type_entry_t node_type_table[MAX_NODES_PER_GROUP];
+ static node_type_entry_t node_type_table[MAX_NODES_PER_GROUP];
+
+ // Pending TTL command storage — needed to match response back to cmd
+static CommandStruct pending_ttl_cmd = {0};
+
+static void handle_rs485_incoming(esp_ble_mesh_model_cb_param_t *param,
+                                   uint16_t packetid, int8_t rssi);
+
+static void node_type_table_save(void)
+{
+    set_blob_in_nvs_flash(GENERAL_HANDLE, NVS_NODE_TYPE_TABLE_KEY,
+        node_type_table, sizeof(node_type_table));
+}
+
+void node_type_table_load(void)
+{
+    size_t size = sizeof(node_type_table);
+    get_blob_from_nvs_flash(GENERAL_HANDLE, NVS_NODE_TYPE_TABLE_KEY,
+        node_type_table, &size);
+}
 
 void node_type_table_set(uint16_t elemaddr, uint8_t node_type)
 {
@@ -149,6 +173,7 @@ void node_type_table_set(uint16_t elemaddr, uint8_t node_type)
         if (node_type_table[i].valid && node_type_table[i].elemaddr == elemaddr)
         {
             node_type_table[i].node_type = node_type;   // re-provisioned — refresh
+            node_type_table_save();
             return;
         }
     }
@@ -157,6 +182,7 @@ void node_type_table_set(uint16_t elemaddr, uint8_t node_type)
         if (!node_type_table[i].valid)
         {
             node_type_table[i] = (node_type_entry_t){ .elemaddr = elemaddr, .node_type = node_type, .valid = true };
+            node_type_table_save();
             return;
         }
     }
@@ -171,6 +197,7 @@ void node_type_table_clear(uint16_t elemaddr)
         if (node_type_table[i].valid && node_type_table[i].elemaddr == elemaddr)
         {
             node_type_table[i].valid = false;
+            node_type_table_save();
             return;
         }
     }
@@ -178,6 +205,8 @@ void node_type_table_clear(uint16_t elemaddr)
 
 uint8_t get_node_type_for_elemaddr(uint16_t elemaddr)
 {
+    if (elemaddr == PROV_OWN_ADDR)
+        return NODE_TYPE_GATEWAY;
     for (int i = 0; i < MAX_NODES_PER_GROUP; i++)
         if (node_type_table[i].valid && node_type_table[i].elemaddr == elemaddr)
             return node_type_table[i].node_type;
@@ -460,6 +489,25 @@ static void example_ble_mesh_config_client_cb(esp_ble_mesh_cfg_client_cb_event_t
         } else if (param->params->opcode == ESP_BLE_MESH_MODEL_OP_MODEL_APP_BIND) {
             ESP_LOGW(BLE_TAG, "%s, Provision and config successfully", __func__);
         }
+        else if (param->params->opcode == ESP_BLE_MESH_MODEL_OP_DEFAULT_TTL_SET) {
+            uint8_t ttl = param->status_cb.default_ttl_status.default_ttl;
+            ESP_LOGI(BLE_TAG, "Node 0x%04x TTL set to %d — success",
+                pending_ttl_cmd.elemaddr, ttl);
+            pending_ttl_cmd.ttl       = ttl;
+            pending_ttl_cmd.errorcode = SUCCESS;
+            generate_ack(GWY_NODE_TTL_ACK, &pending_ttl_cmd);
+            memset(&pending_ttl_cmd, 0, sizeof(CommandStruct));
+        }
+        else if (param->params->opcode == ESP_BLE_MESH_MODEL_OP_DEFAULT_TTL_STATUS)  // ← STATUS not SET
+        {
+            uint8_t confirmed_ttl = param->status_cb.default_ttl_status.default_ttl;
+            ESP_LOGI(BLE_TAG, "Node 0x%04x TTL confirmed = %d",
+                pending_ttl_cmd.elemaddr, confirmed_ttl);
+            pending_ttl_cmd.ttl       = confirmed_ttl;
+            pending_ttl_cmd.errorcode = SUCCESS;
+            generate_ack(GWY_NODE_TTL_ACK, &pending_ttl_cmd);
+            memset(&pending_ttl_cmd, 0, sizeof(CommandStruct));
+        }
         break;
     case ESP_BLE_MESH_CFG_CLIENT_PUBLISH_EVT:
         if (param->params->opcode == ESP_BLE_MESH_MODEL_OP_COMPOSITION_DATA_STATUS) {
@@ -499,6 +547,13 @@ static void example_ble_mesh_config_client_cb(esp_ble_mesh_cfg_client_cb_event_t
             if (err != ESP_OK) {
                 ESP_LOGE(BLE_TAG, "Failed to send Config Model App Bind");
             }
+            break;
+        case ESP_BLE_MESH_MODEL_OP_DEFAULT_TTL_SET:
+            ESP_LOGE(BLE_TAG, "TTL Set timeout for node 0x%04x",
+                pending_ttl_cmd.elemaddr);
+            pending_ttl_cmd.errorcode = FAILURE;
+            generate_ack(GWY_NODE_TTL_ACK, &pending_ttl_cmd);
+            memset(&pending_ttl_cmd, 0, sizeof(CommandStruct));
             break;
         default:
             break;
@@ -663,6 +718,104 @@ void ble_init(void)
  * =========================================================================
  */
 
+/*===========================================================
+ * RS485 node incoming message dispatcher
+ * Called from handle_ble_incoming() when source node_type = RS485
+ * Reads packetid from offset 0 of raw bytes — valid for all
+ * RS485 packet structs (packetid always at offset 0)
+ *===========================================================*/
+static void handle_rs485_incoming(esp_ble_mesh_model_cb_param_t *param,
+                                   uint16_t packetid, int8_t rssi)
+{
+    uint8_t *msg = param->model_operation.msg;
+
+    ESP_LOGI(BLE_TAG, "RS485 node msg packetid=%d rssi=%d", packetid, rssi);
+
+    switch (packetid)
+    {
+    /* Periodic / event-driven pushes — no tracker, publish directly */
+    case NODE_METER_READING_PACKET:
+    case NODE_METER_READING_1P_PACKET:
+        rs485_relay_publish_meter_reading((ModbusReadingPkt *)msg);
+        break;
+
+    case NODE_GPIO_STATUS_PACKET:
+        rs485_relay_publish_gpio_status((GpioStatusPkt *)msg);
+        break;
+
+    case NODE_SUMAN_AC_STATUS_PACKET:
+        rs485_relay_publish_suman_ac_status((SumanAcStatusPkt *)msg);
+        break;
+
+    /* Command ACKs — use dedicated publishers */
+    case NODE_SUMAN_AC_CONTROL_ACK:
+        rs485_relay_publish_suman_ac_control_ack((SumanAcControlAck *)msg);
+        break;
+
+    case NODE_SUMAN_AC_CONFIG_ACK:
+        rs485_relay_publish_suman_ac_config_ack((SumanAcConfigAck *)msg);
+        break;
+
+    /* Generic command ACKs — use rs485_relay_handle_node_ack() */
+    // case NODE_METER_CONFIG_ACK:
+    // case NODE_GPIO_CONFIG_ACK:
+    // case NODE_GPIO_SET_ACK:
+    // {
+    //     RS485CmdStruct *ack = (RS485CmdStruct *)msg;
+    //     ack->rssi = rssi;
+    //     rs485_relay_handle_node_ack(ack);
+    //     break;
+    // }
+
+    // /* Provisioning lifecycle — shared with IR AC node */
+    // case NODE_PROV_PACKET:
+    // case NODE_UNPROV_PACKET:
+    // case NODE_HEARTBEAT_ACK:
+    // case NODE_HEARTBEAT_PUB_CONF_PACKET:
+    // case NODE_DEBUG_INFO_PACKET:
+    // case NODE_GENERAL_PACKET:
+    // {
+    //     RS485CmdStruct *ack = (RS485CmdStruct *)msg;
+    //     ack->rssi = rssi;
+    //     generate_ack(packetid, (CommandStruct *)ack);
+    //     if (packetid == NODE_UNPROV_PACKET)
+    //     {
+    //         esp_err_t err = esp_ble_mesh_provisioner_delete_node_with_addr(ack->elemaddr);
+    //         if (err) ESP_LOGE(BLE_TAG, "Failed to remove RS485 node: %s",
+    //                           esp_err_to_name(err));
+    //         node_type_table_clear(ack->elemaddr);
+    //     }
+    //     if (ack->msgseqno != BUTTON_PRESS_MSGSEQNO)
+    //         removeQueueItemByMsgSeqNo(command_queue, ack->msgseqno);
+    //     break;
+    // }
+
+    // default:
+    //     ESP_LOGW(BLE_TAG, "Unknown RS485 packetid=%d — ignored", packetid);
+    //     break;
+    /* ALL other ACKs — single handler */
+    default:
+    {
+        RS485CmdStruct *ack = (RS485CmdStruct *)msg;
+        ack->rssi = rssi;
+        rs485_relay_handle_node_ack(ack);
+
+        if (packetid == NODE_UNPROV_PACKET)
+        {
+            esp_err_t err = esp_ble_mesh_provisioner_delete_node_with_addr(
+                                ack->elemaddr);
+            if (err) ESP_LOGE(BLE_TAG, "Failed to remove RS485 node: %s",
+                              esp_err_to_name(err));
+            node_type_table_clear(ack->elemaddr);
+        }
+
+        if (ack->msgseqno != BUTTON_PRESS_MSGSEQNO)
+            removeQueueItemByMsgSeqNo(command_queue, ack->msgseqno);
+        break;
+    }
+    }
+}
+
 /**
  * @brief Function that handles the incoming ble messages from Nodes
  * @param param 
@@ -671,6 +824,20 @@ void handle_ble_incoming(esp_ble_mesh_model_cb_param_t *param)
 {
     int8_t rssi = param->model_operation.ctx->recv_rssi;
     ESP_LOGI(BLE_TAG, "Incoming BLE msg RSSI: %d dBm", rssi);
+
+    /* Check source element address — if RS485 node, route to RS485 relay */
+    uint8_t  *msg      = param->model_operation.msg;
+    uint16_t  src_addr = param->model_operation.ctx->addr;
+    uint16_t  packetid = (uint16_t)msg[0] | ((uint16_t)msg[1] << 8);
+
+    if (get_node_type_for_elemaddr(src_addr) == NODE_TYPE_RS485)
+    {
+        handle_rs485_incoming(param, packetid, rssi);
+        return;
+    }
+
+    /* IR AC node handling continues below */
+
     teaching_mode *teach_ack = (teaching_mode *)param->model_operation.msg;
     if(teach_ack->packetid == NODE_TEACHING_MODE) {
         generate_node_teaching_mode_ack(teach_ack);
@@ -745,17 +912,88 @@ void handle_ble_incoming(esp_ble_mesh_model_cb_param_t *param)
         return;
     }
 
+    // ── Node AC control ACK — single unicast or multi-unicast ────────────
     if (ack->packetid == NODE_AC_CONTROL_PACKET)
-        generate_ack(NODE_AC_CONTROL_ACK, ack);
+    {
+        GroupAckTracker_t *tracker = group_tracker_find_by_seq(ack->group_cmd_seq);
+        if (tracker != NULL && tracker->type == TRACKER_TYPE_MULTICAST)
+        {
+            // Part of multi-unicast command — update tracker
+            ESP_LOGI(BLE_TAG, "Multi-unicast ACK from node 0x%04x seq=%d err=%d",
+                ack->elemaddr, ack->group_cmd_seq, ack->errorcode);
+            bool all_done = group_tracker_record_ack(tracker, ack->elemaddr, ack->errorcode);
+            if (all_done)
+            {
+                ESP_LOGI(BLE_TAG, "Multi-unicast complete — all %d nodes responded",
+                    tracker->expected);
+                generate_ack(GWY_MULTI_AC_CONTROL_SUMMARY_ACK, &tracker->cmd);
+                group_tracker_free(tracker);
+            }
+            else
+            {
+                ESP_LOGI(BLE_TAG, "Multi-unicast tracker [seq=%d]: %d/%d ACKs",
+                    ack->group_cmd_seq, tracker->received, tracker->expected);
+            }
+        }
+        else
+        {
+            // Regular single unicast
+            generate_ack(NODE_AC_CONTROL_ACK, ack);
+        }
+        if (ack->msgseqno != BUTTON_PRESS_MSGSEQNO)
+            removeQueueItemByMsgSeqNo(command_queue, ack->msgseqno);
+        return;
+    }
     else
         generate_ack(ack->packetid, ack);
+    
     if(ack->packetid == NODE_UNPROV_PACKET) {
         esp_err_t err = esp_ble_mesh_provisioner_delete_node_with_addr(ack->elemaddr);
         if(err) ESP_LOGE(BLE_TAG, "Failed to remove Node(elemAddr:%d) from database - %s",ack->elemaddr, esp_err_to_name(err));
         node_type_table_clear(ack->elemaddr);
     }
+
     if(ack->msgseqno != BUTTON_PRESS_MSGSEQNO) 
         removeQueueItemByMsgSeqNo(command_queue, ack->msgseqno);
+}
+
+
+void handle_set_node_ttl(CommandStruct *cmd)
+{
+    ESP_LOGW(BLE_TAG, "Setting TTL=%d for addr 0x%04x", cmd->ttl, cmd->elemaddr);
+    // Node TTL — use Config Client model
+    esp_ble_mesh_node_t *node = esp_ble_mesh_provisioner_get_node_with_addr(cmd->elemaddr);
+    if (node == NULL)
+    {
+        ESP_LOGE(BLE_TAG, "Node 0x%04x not found", cmd->elemaddr);
+        cmd->errorcode = FAILURE;
+        generate_ack(GWY_NODE_TTL_ACK, cmd);
+        return;
+    }
+
+    esp_ble_mesh_client_common_param_t common = {0};
+    esp_ble_mesh_cfg_client_set_state_t set   = {0};
+
+    example_ble_mesh_set_msg_common(&common, node, config_client.model,
+        ESP_BLE_MESH_MODEL_OP_DEFAULT_TTL_SET);
+    common.ctx.send_ttl   = 7;
+    set.default_ttl_set.ttl = cmd->ttl;
+
+    memcpy(&pending_ttl_cmd, cmd, sizeof(CommandStruct));
+
+    esp_err_t err = esp_ble_mesh_config_client_set_state(&common, &set);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(BLE_TAG, "Failed to send Config TTL Set: %s", esp_err_to_name(err));
+        cmd->errorcode = FAILURE;
+        generate_ack(GWY_NODE_TTL_ACK, cmd);
+        memset(&pending_ttl_cmd, 0, sizeof(CommandStruct));
+        return;
+    }
+
+    ESP_LOGI(BLE_TAG, "Config TTL Set sent to node 0x%04x — waiting for response",
+        cmd->elemaddr);
+    // ACK sent from example_ble_mesh_config_client_cb() on DEFAULT_TTL_STATUS
 }
 
 void handle_gwy_group_subscribe(CommandStruct *cmd)

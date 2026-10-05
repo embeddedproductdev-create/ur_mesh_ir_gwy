@@ -44,6 +44,7 @@ extern const char *NVS_PUBPERIOD_KEY;
 extern const char *NVS_LAST_COMMAND_KEY;
 extern const char *NVS_TEACHING_MODE_STARTING_TEMPERATURE_KEY;
 extern const char *NVS_TEACHING_MODE_ENDING_TEMPERATURE_KEY;
+extern const char *NVS_NODE_TYPE_TABLE_KEY;
 
 typedef enum
 {

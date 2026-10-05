@@ -12,13 +12,13 @@
 #define CLIENT_RELEASE 1
 /*====================================================================*/
 
-#define LTE_THREAD_STACK_SIZE 4096
+#define LTE_THREAD_STACK_SIZE 8192
 #define IR_THREAD_STACK_SIZE 8192
 
 #if(IS_GWY)
 #define MAJ_VERSION 1
 #define MIN_VERSION 1
-#define PATCH_VERSION 8
+#define PATCH_VERSION 5
 #endif
 
 #if(!IS_GWY)

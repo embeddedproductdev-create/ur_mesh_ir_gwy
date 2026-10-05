@@ -50,6 +50,7 @@ const char *NVS_PUBPERIOD_KEY = "PubPeriod";
 const char *NVS_LAST_COMMAND_KEY = "LastCommand";
 const char *NVS_TEACHING_MODE_STARTING_TEMPERATURE_KEY = "StartTemp";
 const char *NVS_TEACHING_MODE_ENDING_TEMPERATURE_KEY = "EndTemp";
+const char *NVS_NODE_TYPE_TABLE_KEY = "NodeTypeTbl";
 
 const char *NVS_TEACHING_MODE_CMD_KEYS[] = {
     "CMD1",
@@ -530,7 +531,7 @@ void nvs_init()
     pull_data_from_nvs();
 
     group_table_load();
-
+    node_type_table_load();
     // Example of nvs_get_stats() to get overview of actual statistics of data entries :
     nvs_stats_t nvs_stats;
 

@@ -139,6 +139,8 @@ const char *MESSAGE_KEY = "Message";
 const char *ERROR_CHK_ENABLED_KEY = "ErrorCheckEnabled";
 const char *RSSI_KEY = "RSSI_dBm";
 const char *GROUP_ADDR_KEY = "GroupAddr";
+const char *NODE_TYPE_KEY = "NodeType";
+const char *TTL_KEY = "TTL";
 
 bool powerDownFlag = false;
 
@@ -212,7 +214,7 @@ void publish_from_queue()
  */
 void enqueue_for_publish(char *ack)
 {
-    if (xQueueSend(publish_queue, &ack, portMAX_DELAY) != pdPASS)
+    if (xQueueSend(publish_queue, &ack, pdMS_TO_TICKS(5000)) != pdPASS)
     {
         ESP_LOGE(LTE_TAG, "Publish Queue Full. Failed to enqueue ACK");
         free(ack); 
@@ -423,6 +425,7 @@ void generate_ack(mqtt_packets packetid, CommandStruct *cmd_struct)
         jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
         jwObj_string(&jwc, NODE_SER_NO_KEY, cmd_struct->deviceName);
         jwObj_int(&jwc, ELEMENT_ADDR_KEY, cmd_struct->elemaddr);
+        jwObj_int(&jwc, NODE_TYPE_KEY, get_node_type_for_elemaddr(cmd_struct->elemaddr));
         jwObj_int(&jwc, RSSI_KEY, cmd_struct->rssi);
         jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
         jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
@@ -789,6 +792,7 @@ void generate_ack(mqtt_packets packetid, CommandStruct *cmd_struct)
         break;
         
     case NODE_GROUP_AC_CONTROL_SUMMARY_ACK:
+    {
         jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
         jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
         jwObj_int(&jwc, GROUP_ADDR_KEY, cmd_struct->groupaddr);
@@ -804,7 +808,45 @@ void generate_ack(mqtt_packets packetid, CommandStruct *cmd_struct)
                 jwArr_int(&jwc, t->failed_addrs[i]);
         jwEnd(&jwc);
         break;
+    }
 
+    case GWY_MULTI_AC_CONTROL_IMMEDIATE_ACK:
+        jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
+        jwObj_int(&jwc, MSG_SEQ_NO_KEY, cmd_struct->msgseqno);
+        jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
+        jwObj_int(&jwc, "NodeCount", cmd_struct->elemaddr);   // count stored in elemaddr
+        jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
+        jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
+        break;
+
+    case GWY_MULTI_AC_CONTROL_SUMMARY_ACK:
+    {
+        GroupAckTracker_t *t = group_tracker_find_by_seq(cmd_struct->group_cmd_seq);
+        jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
+        jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
+        jwObj_int(&jwc, "Seq", cmd_struct->group_cmd_seq);
+        jwObj_int(&jwc, "ExpectedNodes", t ? t->expected : 0);
+        jwObj_int(&jwc, "ReceivedAcks",  t ? t->received : 0);
+        jwObj_int(&jwc, "FailedCount",   t ? t->failed_count : 0);
+        jwObj_array(&jwc, "FailedNodes");
+        if (t)
+            for (int i = 0; i < t->failed_count; i++)
+                jwArr_int(&jwc, t->failed_addrs[i]);
+        jwEnd(&jwc);
+        break;
+    }
+
+    case GWY_NODE_TTL_ACK:
+        jwObj_int(&jwc, JSON_PACKET_ID_KEY, packetid);
+        jwObj_int(&jwc, MSG_SEQ_NO_KEY, cmd_struct->msgseqno);
+        jwObj_string(&jwc, GWY_SER_NO_KEY, serialNoStr);
+        // jwObj_string(&jwc, NODE_SER_NO_KEY, cmd_struct->deviceName);
+        jwObj_int(&jwc, ELEMENT_ADDR_KEY, cmd_struct->elemaddr);
+        jwObj_int(&jwc, "TTL", cmd_struct->ttl);
+        jwObj_int(&jwc, ERROR_CODE_KEY, cmd_struct->errorcode);
+        jwObj_string(&jwc, ERROR_MSG_KEY, get_error_code_name(cmd_struct->errorcode));
+        break;
+    
     default:
         ESP_LOGE(LTE_TAG, "Unknown Packet - %d in %s", cmd_struct->packetid, __func__);
         jwEnd(&jwc);
@@ -1115,7 +1157,8 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
 
     if (cmd_struct->packetid == GWY_AC_CONTROL_PACKET || 
         cmd_struct->packetid == NODE_AC_CONTROL_PACKET || 
-        cmd_struct->packetid == NODE_GROUP_AC_CONTROL_PACKET)
+        cmd_struct->packetid == NODE_GROUP_AC_CONTROL_PACKET || 
+        cmd_struct->packetid == GWY_MULTI_AC_CONTROL_PACKET)
     {
         if (cmd_struct->packetid == GWY_AC_CONTROL_PACKET && !configured)
         {
@@ -1150,6 +1193,48 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
             cmd_struct->errorcode = NODE_NOT_IN_GROUP;
             return;
         }
+    }
+
+    //=================================================================//
+    // Multi-unicast AC control — validate ElementAddrs array
+    // AC fields validated below in the shared AC control block
+    //=================================================================//
+    if (cmd_struct->packetid == GWY_MULTI_AC_CONTROL_PACKET)
+    {
+        cJSONTestValue = cJSON_GetObjectItem(json_obj, "ElementAddrs");
+        if (cJSONTestValue == NULL)
+        {
+            cmd_struct->errorcode = MISSING_ELEMENT_ADDR_LIST;
+            return;
+        }
+        else if (!cJSON_IsArray(cJSONTestValue))
+        {
+            cmd_struct->errorcode = MISSING_ELEMENT_ADDR_LIST;
+            return;
+        }
+        int count = cJSON_GetArraySize(cJSONTestValue);
+        if (count == 0)
+        {
+            cmd_struct->errorcode = ELEMENT_ADDR_LIST_EMPTY;
+            return;
+        }
+        if (count > 24)
+        {
+            cmd_struct->errorcode = ELEMENT_ADDR_LIST_TOO_LARGE;
+            return;
+        }
+        // Validate each address is a valid number
+        for (int i = 0; i < count; i++)
+        {
+            cJSON *item = cJSON_GetArrayItem(cJSONTestValue, i);
+            if (!cJSON_IsNumber(item))
+            {
+                cmd_struct->errorcode = ELEMENT_ADDR_INVALID_FORMAT;
+                return;
+            }
+        }
+        // ElementAddrs valid — AC fields validated in block below
+        // Actual address values parsed in parse_json() → handle_multi_ac_control()
     }
                      
         int power, temperature, fanspeed, swingh, swingv, locking, ontimer, offtimer, upperTemperatureLimit, lowerTemperatureLimit;
@@ -1687,6 +1772,42 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
         cmd_struct->groupaddr = (uint16_t)groupAddr;
         return;
     }
+    if (cmd_struct->packetid == GWY_NODE_TTL_PACKET)
+    {
+        // Parse ElementAddr — NOT handled by existing block (GWY packet range)
+        cJSONTestValue = cJSON_GetObjectItem(json_obj, ELEMENT_ADDR_KEY);
+        if (cJSONTestValue == NULL)
+        {
+            cmd_struct->errorcode = MISSING_ELEMENT_ADDR;
+            return;
+        }
+        if (!cJSON_IsNumber(cJSONTestValue))
+        {
+            cmd_struct->errorcode = ELEMENT_ADDR_INVALID_FORMAT;
+            return;
+        }
+        cmd_struct->elemaddr = (uint16_t)cJSONTestValue->valueint;  // ← ADD
+
+        // Parse TTL
+        cJSONTestValue = cJSON_GetObjectItem(json_obj, TTL_KEY);
+        if (cJSONTestValue == NULL)
+        {
+            cmd_struct->errorcode = MISSING_TTL;
+            return;
+        }
+        if (!cJSON_IsNumber(cJSONTestValue))
+        {
+            cmd_struct->errorcode = TTL_INVALID_RANGE;
+            return;
+        }
+        int ttl = cJSONTestValue->valueint;
+        if (ttl < 2 || ttl > 127)
+        {
+            cmd_struct->errorcode = TTL_INVALID_RANGE;
+            return;
+        }
+        cmd_struct->ttl = (uint8_t)ttl;
+    }
 }
 
 /**
@@ -1724,6 +1845,49 @@ void unregister(uint16_t msgseqno)
     factory_reset_device();
     hb_timer_stop();
     powerDownFlag = true;
+}
+
+void handle_multi_ac_control(CommandStruct *cmd, uint16_t *addrs, uint8_t count)
+{
+    ESP_LOGW(LTE_TAG, "Multi-unicast AC control to %d nodes", count);
+
+    // Allocate tracker using same linked list mechanism as group control
+    // group_addr = 0x0000 since this is unicast — no group address involved
+    GroupEntry_t fake_entry = {0};
+    fake_entry.node_count = count;
+    for (int i = 0; i < count; i++)
+        fake_entry.node_addrs[i] = addrs[i];
+
+    GroupAckTracker_t *tracker = group_tracker_alloc(&fake_entry, 0x0000, 0);
+    tracker->type = TRACKER_TYPE_MULTICAST;   // ← explicitly mark as multicast
+
+    if (tracker == NULL)
+    {
+        ESP_LOGE(LTE_TAG, "Tracker malloc failed — rejecting multi-unicast command");
+        cmd->errorcode = FAILURE;
+        generate_ack(GWY_MULTI_AC_CONTROL_IMMEDIATE_ACK, cmd);
+        return;
+    }
+
+    // Assign seq to cmd — node echoes it back in ACK for tracker matching
+    cmd->group_cmd_seq = tracker->seq;
+    memcpy(&tracker->cmd, cmd, sizeof(CommandStruct));
+
+    // Send individual unicast to each node
+    for (int i = 0; i < count; i++)
+    {
+        cmd->elemaddr = addrs[i];
+        cmd->packetid = NODE_AC_CONTROL_PACKET;
+        cmd->msgseqno  = (tracker->seq * 100) + i;   // ← unique per node   
+        ESP_LOGI(LTE_TAG, "Multi-unicast → node 0x%04x [%d/%d]",
+            addrs[i], i + 1, count);
+        send_cmd_to_node(cmd);
+    }
+
+    // Immediate ACK to cloud — command dispatched to all nodes
+    cmd->elemaddr = count;   // reuse elemaddr to carry count to generate_ack
+    cmd->errorcode = SUCCESS;
+    generate_ack(GWY_MULTI_AC_CONTROL_IMMEDIATE_ACK, cmd);
 }
 
 void handle_group_ac_control(CommandStruct *cmd)
@@ -1827,6 +1991,25 @@ void parse_json()
                 handle_group_table_query(&cmd_struct);
                 return;
 
+            case GWY_MULTI_AC_CONTROL_PACKET:
+                // Parse ElementAddrs into local stack array
+                // json_obj already available — no re-parse needed
+                uint16_t multicast_addrs[24] = {0};
+                uint8_t  multicast_count     = 0;
+                cJSON *arr = cJSON_GetObjectItem(json_obj, "ElementAddrs");
+                int count  = cJSON_GetArraySize(arr);
+                for (int i = 0; i < count; i++)
+                    multicast_addrs[i] = (uint16_t)cJSON_GetArrayItem(arr, i)->valueint;
+                multicast_count = (uint8_t)count;
+                ESP_LOGW(LTE_TAG, "Multi-unicast AC control to %d nodes", multicast_count);
+                handle_multi_ac_control(&cmd_struct, multicast_addrs, multicast_count);
+                return;
+            
+            case GWY_NODE_TTL_PACKET:
+                handle_set_node_ttl(&cmd_struct);
+                return;
+
+
             case NODE_AC_CONTROL_PACKET:
                 send_cmd_to_node(&cmd_struct);
                 ESP_LOGW(LTE_TAG, "Currnet command queue count : %d | Heap : %" PRIu32 " bytes", uxQueueMessagesWaiting(command_queue), esp_get_minimum_free_heap_size());
@@ -1899,6 +2082,10 @@ void parse_json()
             generate_ack(GWY_GROUP_UNSUB_ACK, &cmd_struct);
         else if (cmd_struct.packetid == NODE_GROUP_AC_CONTROL_PACKET)
             generate_ack(NODE_GROUP_AC_CONTROL_IMMEDIATE_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == GWY_MULTI_AC_CONTROL_PACKET)
+            generate_ack(GWY_MULTI_AC_CONTROL_IMMEDIATE_ACK, &cmd_struct);
+        else if (cmd_struct.packetid == GWY_NODE_TTL_PACKET)
+            generate_ack(GWY_NODE_TTL_ACK, &cmd_struct);
         else
             generate_ack(cmd_struct.packetid, &cmd_struct);
     }
@@ -2079,6 +2266,23 @@ void maintainCommandQueue()
     }
 }
 
+void freeup_publish_queue()
+{
+    // If publish queue is full — drain all stale messages to unblock
+    if (uxQueueMessagesWaiting(publish_queue) >= PUBLISH_QUEUE_SIZE)
+    {
+        ESP_LOGE(LTE_TAG, "Publish queue full (%d/%d) — draining stale messages",
+            uxQueueMessagesWaiting(publish_queue), PUBLISH_QUEUE_SIZE);
+        char *stale = NULL;
+        while (xQueueReceive(publish_queue, &stale, 0) == pdPASS)
+        {
+            free(stale);
+            stale = NULL;
+        }
+        ESP_LOGW(LTE_TAG, "Publish queue drained");
+    }
+}
+
 /**
  * Function that takes care of maintaining the MQTT communication with the broker
  * and also publishing ACK message from pubmessage queue to the Cloud
@@ -2187,6 +2391,7 @@ void maintainMQTTConnection()
             continue;
         }
         ping_fail_counter = 0;
+        freeup_publish_queue();
         maintainCommandQueue();
         publish_from_queue();
         group_tracker_check_timeouts();   
