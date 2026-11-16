@@ -155,6 +155,7 @@ bool LOG_DATA = true;
 char node_macid[18];
 
 TickType_t lastNetworkCheckedTime = 0;
+RetryTracker_t *retry_tracker_head = NULL;
 
 // Queues
 QueueHandle_t publish_queue;
@@ -1749,6 +1750,20 @@ void error_check_json(cJSON *json_obj, CommandStruct *cmd_struct)
     if (cmd_struct->packetid == GWY_GROUP_SUB_PACKET || cmd_struct->packetid == GWY_GROUP_UNSUB_PACKET || 
         cmd_struct->packetid == NODE_GROUP_SUB_PACKET || cmd_struct->packetid == NODE_GROUP_UNSUB_PACKET)
     {
+        // Parse ElementAddr — not handled by existing block (GWY packet range)
+        cJSONTestValue = cJSON_GetObjectItem(json_obj, ELEMENT_ADDR_KEY);
+        if (cJSONTestValue == NULL)
+        {
+            cmd_struct->errorcode = MISSING_ELEMENT_ADDR;
+            return;
+        }
+        if (!cJSON_IsNumber(cJSONTestValue))
+        {
+            cmd_struct->errorcode = ELEMENT_ADDR_INVALID_FORMAT;
+            return;
+        }
+        cmd_struct->elemaddr = (uint16_t)cJSONTestValue->valueint; 
+        
         cJSONTestValue = cJSON_GetObjectItem(json_obj, GROUP_ADDR_KEY);
         if (cJSONTestValue == NULL)
         {
@@ -1859,33 +1874,35 @@ void handle_multi_ac_control(CommandStruct *cmd, uint16_t *addrs, uint8_t count)
         fake_entry.node_addrs[i] = addrs[i];
 
     GroupAckTracker_t *tracker = group_tracker_alloc(&fake_entry, 0x0000, 0);
-    tracker->type = TRACKER_TYPE_MULTICAST;   // ← explicitly mark as multicast
-
     if (tracker == NULL)
     {
         ESP_LOGE(LTE_TAG, "Tracker malloc failed — rejecting multi-unicast command");
         cmd->errorcode = FAILURE;
+        cmd->elemaddr  = 0;                          // NodeCount 0 in the error ACK
         generate_ack(GWY_MULTI_AC_CONTROL_IMMEDIATE_ACK, cmd);
         return;
     }
+    tracker->type = TRACKER_TYPE_MULTICAST;          // moved below the NULL check
 
     // Assign seq to cmd — node echoes it back in ACK for tracker matching
     cmd->group_cmd_seq = tracker->seq;
     memcpy(&tracker->cmd, cmd, sizeof(CommandStruct));
+
+    uint16_t cloud_seq = cmd->msgseqno;              // save cloud's MsgSeqNo
 
     // Send individual unicast to each node
     for (int i = 0; i < count; i++)
     {
         cmd->elemaddr = addrs[i];
         cmd->packetid = NODE_AC_CONTROL_PACKET;
-        cmd->msgseqno  = (tracker->seq * 100) + i;   // ← unique per node   
-        ESP_LOGI(LTE_TAG, "Multi-unicast → node 0x%04x [%d/%d]",
-            addrs[i], i + 1, count);
+        cmd->msgseqno = (uint16_t)((tracker->seq * 100) + i);   // unique per node
+        ESP_LOGI(LTE_TAG, "Multi-unicast = node 0x%04x [%d/%d]", addrs[i], i + 1, count);
         send_cmd_to_node(cmd);
     }
 
     // Immediate ACK to cloud — command dispatched to all nodes
-    cmd->elemaddr = count;   // reuse elemaddr to carry count to generate_ack
+    cmd->msgseqno  = cloud_seq;                      // restore for the ACK
+    cmd->elemaddr  = count;                          // reuse elemaddr to carry count
     cmd->errorcode = SUCCESS;
     generate_ack(GWY_MULTI_AC_CONTROL_IMMEDIATE_ACK, cmd);
 }
@@ -1927,7 +1944,7 @@ void handle_group_ac_control(CommandStruct *cmd)
 void parse_json()
 {
     led_set_state(LED_STATE_CMD_RECVD);
-    CommandStruct cmd_struct;
+    CommandStruct cmd_struct = {0};
 
     cJSON *json_obj = cJSON_Parse(LTE_UART_data);
     if (json_obj == NULL)
@@ -2395,6 +2412,7 @@ void maintainMQTTConnection()
         maintainCommandQueue();
         publish_from_queue();
         group_tracker_check_timeouts();   
+        retry_tracker_check_timeouts(); 
         rs485_relay_check_timeouts();
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -2516,6 +2534,120 @@ void powerUpLTE()
     vTaskDelay(pdMS_TO_TICKS(2500));
     gpio_set_level(LTE_POWER_PIN, 0);
     ESP_LOGI(LTE_TAG, " LTE Power-Up Sequence Done");
+}
+
+RetryTracker_t *retry_tracker_alloc(CommandStruct *cmd)
+{
+    ESP_LOGW(LTE_TAG, "retry_tracker_alloc — node 0x%04x msgseqno=%d",
+        cmd->elemaddr, cmd->msgseqno); 
+    RetryTracker_t *t = (RetryTracker_t *)malloc(sizeof(RetryTracker_t));
+    if (t == NULL)
+    {
+        ESP_LOGE(LTE_TAG, "retry_tracker_alloc malloc failed");
+        return NULL;
+    }
+    memset(t, 0, sizeof(RetryTracker_t));
+    t->elemaddr       = cmd->elemaddr;
+    t->msgseqno       = cmd->msgseqno;
+    t->group_cmd_seq  = cmd->group_cmd_seq;
+    t->retry_count    = 0;
+    t->sent_tick      = xTaskGetTickCount();
+    memcpy(&t->cmd, cmd, sizeof(CommandStruct));
+    t->next           = retry_tracker_head;
+    retry_tracker_head = t;
+    ESP_LOGI(LTE_TAG, "Retry tracker alloc — node 0x%04x msgseqno=%d",
+        cmd->elemaddr, cmd->msgseqno);
+    return t;
+}
+
+void retry_tracker_free(RetryTracker_t *tracker)
+{
+    if (retry_tracker_head == tracker)
+        retry_tracker_head = tracker->next;
+    else
+    {
+        RetryTracker_t *curr = retry_tracker_head;
+        while (curr != NULL && curr->next != tracker)
+            curr = curr->next;
+        if (curr != NULL)
+            curr->next = tracker->next;
+    }
+    ESP_LOGI(LTE_TAG, "Retry tracker freed — node 0x%04x msgseqno=%d",
+        tracker->elemaddr, tracker->msgseqno);
+    free(tracker);
+}
+
+void retry_tracker_free_by_seqno(uint16_t msgseqno)
+{
+    RetryTracker_t *curr = retry_tracker_head;
+    while (curr != NULL)
+    {
+        if (curr->msgseqno == msgseqno)
+        {
+            retry_tracker_free(curr);
+            return;
+        }
+        curr = curr->next;
+    }
+}
+
+void retry_tracker_check_timeouts(void)
+{
+    if (retry_tracker_head == NULL) return;  
+    // ESP_LOGI(LTE_TAG, "retry_tracker_check — head not null");
+    RetryTracker_t *curr = retry_tracker_head;
+    while (curr != NULL)
+    {
+        RetryTracker_t *next = curr->next;
+        TickType_t elapsed_ms = (xTaskGetTickCount() - curr->sent_tick)
+                                * portTICK_PERIOD_MS;
+
+        if (elapsed_ms >= RETRY_TIMEOUT_MS)
+        {
+            if (curr->retry_count == 0)
+            {
+                // First timeout — retry once
+                ESP_LOGW(LTE_TAG, "Retry timeout — resending to node 0x%04x (attempt 2)",
+                    curr->elemaddr);
+                curr->retry_count = 1;
+                curr->sent_tick   = xTaskGetTickCount();
+                curr->cmd.requestSentToNode = false;
+                send_cmd_to_node(&curr->cmd);
+            }
+            else
+            {
+                // Second timeout — send error ACK to cloud
+                ESP_LOGE(LTE_TAG, "No ACK after retry — node 0x%04x unreachable",
+                    curr->elemaddr);
+               // Remove stale item from command queue
+                removeQueueItemByMsgSeqNo(command_queue, curr->msgseqno);
+                ESP_LOGW(LTE_TAG, "Removed stale command from queue: msgseqno=%d",
+                    curr->msgseqno);
+                ESP_LOGW(LTE_TAG, "Command queue: %d | Heap: %" PRIu32 " bytes",
+                    uxQueueMessagesWaiting(command_queue), esp_get_minimum_free_heap_size());
+
+                // Send error ACK to cloud
+                curr->cmd.errorcode   = NODE_COMM_TIMEOUT;
+                curr->cmd.bleErrorCode = SUCCESS;
+                generate_ack(NODE_AC_CONTROL_ACK, &curr->cmd);
+                retry_tracker_free(curr);
+            }
+        }
+
+        curr = next;
+    }
+}
+
+RetryTracker_t *retry_tracker_find_by_seqno(uint16_t msgseqno)
+{
+    RetryTracker_t *curr = retry_tracker_head;
+    while (curr != NULL)
+    {
+        if (curr->msgseqno == msgseqno)
+            return curr;
+        curr = curr->next;
+    }
+    return NULL;
 }
 
 /**

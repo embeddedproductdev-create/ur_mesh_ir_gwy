@@ -461,6 +461,28 @@ typedef struct {
     char *msg;
 }general_purpose_t;
 
+typedef struct RetryTracker_tag
+{
+    uint16_t    elemaddr;           // target node
+    uint16_t    msgseqno;           // to match ACK and remove from command queue
+    uint16_t    group_cmd_seq;      // to check if part of multi-unicast
+    uint8_t     retry_count;        // 0 = first attempt, 1 = retried once
+    TickType_t  sent_tick;          // when last sent
+    CommandStruct cmd;              // full command to resend
+    struct RetryTracker_tag *next;
+} RetryTracker_t;
+
+extern RetryTracker_t *retry_tracker_head;
+
+#define RETRY_TIMEOUT_MS  3000     // 3 seconds per attempt
+#define MAX_RETRY_COUNT   1        // retry once only
+
+RetryTracker_t *retry_tracker_alloc(CommandStruct *cmd);
+void            retry_tracker_free(RetryTracker_t *tracker);
+void            retry_tracker_free_by_seqno(uint16_t msgseqno);
+void            retry_tracker_check_timeouts(void);
+RetryTracker_t *retry_tracker_find_by_seqno(uint16_t msgseqno);
+
 extern CommandStruct last_command;
 extern manual_control ac_manual_control_t;
 extern teaching_mode teaching_mode_t;

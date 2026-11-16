@@ -59,6 +59,8 @@ bool ble_initialized = false;
 #define ESP_BLE_MESH_VND_MODEL_OP_SEND      ESP_BLE_MESH_MODEL_OP_3(0x00, CID_ESP)
 #define ESP_BLE_MESH_VND_MODEL_OP_STATUS    ESP_BLE_MESH_MODEL_OP_3(0x01, CID_ESP)
 
+#define MSG_TIMEOUT  3000
+
 static uint8_t dev_uuid[ESP_BLE_MESH_OCTET16_LEN];
 
 static struct example_info_store {
@@ -938,6 +940,10 @@ void handle_ble_incoming(esp_ble_mesh_model_cb_param_t *param)
         else
         {
             // Regular single unicast
+            ESP_LOGI(BLE_TAG, "Single unicast ACK from node 0x%04x seq=%d err=%d",
+                ack->elemaddr, ack->group_cmd_seq, ack->errorcode);
+            // Free retry tracker — ACK received, no retry needed
+            retry_tracker_free_by_seqno(ack->msgseqno); 
             generate_ack(NODE_AC_CONTROL_ACK, ack);
         }
         if (ack->msgseqno != BUTTON_PRESS_MSGSEQNO)
@@ -1085,6 +1091,33 @@ void ble_send_group_ac_control(CommandStruct *cmd)
  */
 void send_cmd_to_node(CommandStruct *cmd)
 {
+    // Validate node is provisioned before attempting BLE Mesh send
+    esp_ble_mesh_node_t *node = esp_ble_mesh_provisioner_get_node_with_addr(cmd->elemaddr);
+    if (node == NULL)
+    {
+        ESP_LOGE(BLE_TAG, "Node 0x%04x not provisioned — cannot send command ID:%d",
+            cmd->elemaddr, cmd->packetid);
+        cmd->errorcode = NODE_NOT_PROVISIONED;
+
+        // Send immediate error ACK to cloud
+        switch (cmd->packetid)
+        {
+            case NODE_GROUP_SUB_PACKET:
+                generate_ack(NODE_GROUP_SUB_ACK, cmd);
+                break;
+            case NODE_GROUP_UNSUB_PACKET:
+                generate_ack(NODE_GROUP_UNSUB_ACK, cmd);
+                break;
+            case NODE_AC_CONTROL_PACKET:
+                generate_ack(NODE_AC_CONTROL_ACK, cmd);
+                break;
+            default:
+                generate_ack(cmd->packetid, cmd);
+                break;
+        }
+        return;
+    }
+
     esp_ble_mesh_msg_ctx_t ctx = {
         .addr = cmd->elemaddr,
         .app_idx = prov_key.app_idx,
@@ -1100,6 +1133,19 @@ void send_cmd_to_node(CommandStruct *cmd)
 
         case NODE_AC_CONTROL_PACKET:
             ESP_LOGI(BLE_TAG, "Sending Node AC Control packet");
+            ESP_LOGI(BLE_TAG, "msgseqno=%d group_cmd_seq=%d",   // ← ADD
+                cmd->msgseqno, cmd->group_cmd_seq);
+            if (cmd->group_cmd_seq == 0 &&
+                retry_tracker_find_by_seqno(cmd->msgseqno) == NULL)
+            {
+                retry_tracker_alloc(cmd);
+                ESP_LOGI(BLE_TAG, "retry_tracker_alloc called");
+            }
+            else
+            {
+                ESP_LOGW(BLE_TAG, "retry_tracker_alloc SKIPPED — group_cmd_seq=%d",  // ← ADD
+                    cmd->group_cmd_seq);
+            }
             break;
         
         case NODE_RECONF_PACKET:
@@ -1146,7 +1192,7 @@ void send_cmd_to_node(CommandStruct *cmd)
         generate_ack(cmd->packetid, cmd);
         return;
     }
-    esp_ble_mesh_client_model_send_msg(&vnd_models[0], &ctx, ESP_BLE_MESH_VND_MODEL_OP_SEND, sizeof(CommandStruct), (uint8_t *)cmd, 10, true, ROLE_PROVISIONER);
+    esp_ble_mesh_client_model_send_msg(&vnd_models[0], &ctx, ESP_BLE_MESH_VND_MODEL_OP_SEND, sizeof(CommandStruct), (uint8_t *)cmd, MSG_TIMEOUT, false, ROLE_PROVISIONER);
 }
 
 /**

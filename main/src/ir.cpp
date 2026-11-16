@@ -774,10 +774,109 @@ bool is_decodeable_protocol(decode_type_t protocol)
     }
 }
 
+// /**
+//  * @brief Function that fetches the info of Power, Temperature, Fanspeed and Mode
+//  * from received IR Signal.
+//  * @warning Both teaching mode and Lockign feature depend on the Temperature value that was detected,
+//  * if that fails, then it's FATAL
+//  * @retval true = If Temperature parse was success
+//  * @retval false = If Temperature parse was failure
+//  */
+// bool isFetchControlInfoSuccessful(const char *description)
+// {
+//     ESP_LOGW(IR_TAG, "isFetchControlInfoSuccessful: description='%s'", description);
+//     /*Initializing to Defaults*/
+//     strcpy(ac_manual_control_t.temperature, "");
+//     strcpy(ac_manual_control_t.power, "");
+//     strcpy(ac_manual_control_t.fan, "");
+//     strcpy(ac_manual_control_t.mode, "");
+
+//     ac_manual_control_t.power_value = -1;
+//     ac_manual_control_t.fanspeed_value = -1;
+//     ac_manual_control_t.temperature_value = -1;
+
+//     ac_manual_control_t.power_err = SUCCESS;
+//     ac_manual_control_t.fanspeed_err = SUCCESS;
+//     ac_manual_control_t.mode_err = SUCCESS;
+//     ac_manual_control_t.temperature_err = SUCCESS;
+
+//     /*Starting Decoding Power, Mode, Fanspeed, Temperature Info*/
+//     if (strstr(description, "Power"))
+//     {
+//         snprintf(ac_manual_control_t.power, sizeof(ac_manual_control_t.power), (strstr(description, "Power") + 7));
+//         if (strstr(ac_manual_control_t.power, "On"))
+//             ac_manual_control_t.power_value = 1;
+//         else
+//             ac_manual_control_t.power_value = 0;
+//     }
+//     else
+//     {
+//         ac_manual_control_t.power_err = POWER_NOT_AVAILABLE_IN_IR_SIGNAL_DECODED_STRING;
+//         ac_manual_control_t.power_value = -1;
+//     }
+
+//     if (strstr(description, "Mode:"))
+//     {
+//         if (strstr(description, "(Cool)"))
+//             strcpy(ac_manual_control_t.mode, COOL_MODE_STR);
+//         else if (strstr(description, "(Heat)"))
+//             strcpy(ac_manual_control_t.mode, HEAT_MODE_STR);
+//         else if (strstr(description, "(Auto)"))
+//             strcpy(ac_manual_control_t.mode, AUTO_MODE_STR);
+//         else if (strstr(description, "(Fan)"))
+//             strcpy(ac_manual_control_t.mode, FAN_MODE_STR);
+//         else if (strstr(description, "(Dry)"))
+//             strcpy(ac_manual_control_t.mode, DRY_MODE_STR);
+//         else
+//         {
+//             ac_manual_control_t.mode_err = MODE_NOT_AVAILABLE_IN_IR_SIGNAL_DECODED_STRING;
+//             strcpy(ac_manual_control_t.mode, "-1");
+//         }
+//     }
+//     else
+//     {
+//         ac_manual_control_t.mode_err = MODE_NOT_AVAILABLE_IN_IR_SIGNAL_DECODED_STRING;
+//         strcpy(ac_manual_control_t.mode, "-1");
+//     }
+
+//     if (strstr(description, "Fan"))
+//     {
+//         snprintf(ac_manual_control_t.fan, sizeof(ac_manual_control_t.fan), (strstr(description, "Fan") + 5));
+//         ac_manual_control_t.fanspeed_value = atoi(ac_manual_control_t.fan);
+//     }
+//     else
+//     {
+//         ac_manual_control_t.fanspeed_err = FANSPEED_NOT_AVAILABLE_IN_IR_SIGNAL_DECODED_STRING;
+//         ac_manual_control_t.fanspeed_value = -1;
+//     }
+
+//     if (strstr(description, "Temp"))
+//     {
+//         snprintf(ac_manual_control_t.temperature, sizeof(ac_manual_control_t.temperature), (strstr(description, "Temp") + 6));
+//         ac_manual_control_t.temperature_value = atoi(ac_manual_control_t.temperature);
+//         // Populate currACState fields from last_command
+//         ac_manual_control_t.swingh = last_command.swingh;
+//         ac_manual_control_t.swingv = last_command.swingv;
+//         ac_manual_control_t.ontimer = last_command.ontimer;
+//         ac_manual_control_t.offtimer = last_command.offtimer;
+//         ac_manual_control_t.locking = last_command.locking;
+//         ac_manual_control_t.upperTemperatureLimit = last_command.upperTemperatureLimit;
+//         ac_manual_control_t.lowerTemperatureLimit = last_command.lowerTemperatureLimit;
+//         ac_manual_control_t.ambientTemperatureAnalog = read_analog_temperature_sensor();
+//         ac_manual_control_t.ambientTemperatureDigital = read_digital_temperature_sensor();
+//         return true;
+//     }
+//     else
+//     {
+//         ac_manual_control_t.temperature_err = TEMPERATURE_NOT_AVAILABLE_IN_IR_SIGNAL_DECODED_STRING;
+//         ac_manual_control_t.temperature_value = -1;
+//         return false;
+//     }
+// }
 /**
  * @brief Function that fetches the info of Power, Temperature, Fanspeed and Mode
  * from received IR Signal.
- * @warning Both teaching mode and Lockign feature depend on the Temperature value that was detected,
+ * @warning Both teaching mode and Locking feature depend on the Temperature value that was detected,
  * if that fails, then it's FATAL
  * @retval true = If Temperature parse was success
  * @retval false = If Temperature parse was failure
@@ -790,16 +889,16 @@ bool isFetchControlInfoSuccessful(const char *description)
     strcpy(ac_manual_control_t.power, "");
     strcpy(ac_manual_control_t.fan, "");
     strcpy(ac_manual_control_t.mode, "");
-
+ 
     ac_manual_control_t.power_value = -1;
     ac_manual_control_t.fanspeed_value = -1;
     ac_manual_control_t.temperature_value = -1;
-
+ 
     ac_manual_control_t.power_err = SUCCESS;
     ac_manual_control_t.fanspeed_err = SUCCESS;
     ac_manual_control_t.mode_err = SUCCESS;
     ac_manual_control_t.temperature_err = SUCCESS;
-
+ 
     /*Starting Decoding Power, Mode, Fanspeed, Temperature Info*/
     if (strstr(description, "Power"))
     {
@@ -814,18 +913,27 @@ bool isFetchControlInfoSuccessful(const char *description)
         ac_manual_control_t.power_err = POWER_NOT_AVAILABLE_IN_IR_SIGNAL_DECODED_STRING;
         ac_manual_control_t.power_value = -1;
     }
-
+ 
     if (strstr(description, "Mode:"))
     {
-        if (strstr(description, "(Cool)"))
+        /* [1] Look only inside the Mode field (up to its comma) so "(Auto)" from
+           the Fan field can't be mistaken for the mode */
+        char modefield[24] = {0};
+        const char *p = strstr(description, "Mode:");
+        size_t n = strcspn(p, ",");
+        if (n >= sizeof(modefield))
+            n = sizeof(modefield) - 1;
+        memcpy(modefield, p, n);
+ 
+        if (strstr(modefield, "(Cool)"))
             strcpy(ac_manual_control_t.mode, COOL_MODE_STR);
-        else if (strstr(description, "(Heat)"))
+        else if (strstr(modefield, "(Heat)"))
             strcpy(ac_manual_control_t.mode, HEAT_MODE_STR);
-        else if (strstr(description, "(Auto)"))
+        else if (strstr(modefield, "(Auto)"))
             strcpy(ac_manual_control_t.mode, AUTO_MODE_STR);
-        else if (strstr(description, "(Fan)"))
+        else if (strstr(modefield, "(Fan)"))
             strcpy(ac_manual_control_t.mode, FAN_MODE_STR);
-        else if (strstr(description, "(Dry)"))
+        else if (strstr(modefield, "(Dry)"))
             strcpy(ac_manual_control_t.mode, DRY_MODE_STR);
         else
         {
@@ -838,10 +946,11 @@ bool isFetchControlInfoSuccessful(const char *description)
         ac_manual_control_t.mode_err = MODE_NOT_AVAILABLE_IN_IR_SIGNAL_DECODED_STRING;
         strcpy(ac_manual_control_t.mode, "-1");
     }
-
-    if (strstr(description, "Fan"))
+ 
+    /* [2] "Fan:" — plain "Fan" also matches "(Fan)" inside the Mode field */
+    if (strstr(description, "Fan:"))
     {
-        snprintf(ac_manual_control_t.fan, sizeof(ac_manual_control_t.fan), (strstr(description, "Fan") + 5));
+        snprintf(ac_manual_control_t.fan, sizeof(ac_manual_control_t.fan), (strstr(description, "Fan:") + 5));
         ac_manual_control_t.fanspeed_value = atoi(ac_manual_control_t.fan);
     }
     else
@@ -849,7 +958,7 @@ bool isFetchControlInfoSuccessful(const char *description)
         ac_manual_control_t.fanspeed_err = FANSPEED_NOT_AVAILABLE_IN_IR_SIGNAL_DECODED_STRING;
         ac_manual_control_t.fanspeed_value = -1;
     }
-
+ 
     if (strstr(description, "Temp"))
     {
         snprintf(ac_manual_control_t.temperature, sizeof(ac_manual_control_t.temperature), (strstr(description, "Temp") + 6));
@@ -872,6 +981,15 @@ bool isFetchControlInfoSuccessful(const char *description)
         ac_manual_control_t.temperature_value = -1;
         return false;
     }
+}
+
+static int mode_str_to_num(const char *m)
+{
+    if (strcasecmp(m, COOL_MODE_STR) == 0) return 1;
+    if (strcasecmp(m, HEAT_MODE_STR) == 0) return 2;
+    if (strcasecmp(m, DRY_MODE_STR)  == 0) return 3;
+    if (strcasecmp(m, FAN_MODE_STR)  == 0) return 4;
+    return 0; /* Auto */
 }
 
 /**
@@ -908,10 +1026,21 @@ void locking_feature(const char *description)
     if (!isFetchControlInfoSuccessful(description))
     {
         ESP_LOGW(IR_TAG, "Locking feature: temperature not in IR description — skipping locking check");
+
+            /* [C] power change with no Temp in the text (e.g. Fujitsu Power OFF) */
+        if (ac_manual_control_t.power_err == SUCCESS &&
+            ac_manual_control_t.power_value != last_command.power)
+        {
+            last_command.power = ac_manual_control_t.power_value;
+            set_blob_in_nvs_flash(IR_HANDLE, NVS_LAST_COMMAND_KEY, &last_command, sizeof(CommandStruct));
+        }
     }
     else
     {
-        if (last_command.locking &&                                         // Locking must be enabled by cloud
+        /* [B] limits must be sane */
+        bool limits_valid = last_command.lowerTemperatureLimit <= last_command.upperTemperatureLimit ? 1: 0;
+
+        if (last_command.locking && limits_valid &&                                       // Locking must be enabled by cloud
             ac_manual_control_t.power_value == 1 &&                        // Issue 1: Only lock when Power=ON
             strcasecmp(ac_manual_control_t.mode, FAN_MODE_STR) != 0 &&     // Issue 2: Skip lock if remote pressed Fan mode
             strcasecmp(last_command.mode_str, FAN_MODE_STR) != 0 &&        // Issue 2: Skip lock if last cloud command was Fan mode
@@ -941,21 +1070,25 @@ void locking_feature(const char *description)
 
             ESP_LOGW(IR_TAG, "Setting AC Temperature to : %d", last_command.temperature);
             last_command.power = 1;    // Issue 6: Force Power ON so AC turns on at locked temp
+            set_blob_in_nvs_flash(IR_HANDLE, NVS_LAST_COMMAND_KEY, &last_command, sizeof(CommandStruct));
             ir_transmit();
         }
         else
         {
             // Locking not triggered — accept what user pressed and update last_command
+            /* copy a field only if it parsed OK */
+            if (ac_manual_control_t.power_err == SUCCESS)
+                last_command.power = ac_manual_control_t.power_value;
             last_command.power = ac_manual_control_t.power_value;
             last_command.temperature = ac_manual_control_t.temperature_value;
-            last_command.fanspeed = ac_manual_control_t.fanspeed_value;
-            strcpy(last_command.mode_str, ac_manual_control_t.mode);
-            // Issue 4: Update mode_num alongside mode_str for NVS consistency after reboot
-            if      (strcasecmp(ac_manual_control_t.mode, "Cool") == 0) last_command.mode_num = 1;
-            else if (strcasecmp(ac_manual_control_t.mode, "Hot")  == 0) last_command.mode_num = 2;
-            else if (strcasecmp(ac_manual_control_t.mode, "Auto") == 0) last_command.mode_num = 0;
-            else if (strcasecmp(ac_manual_control_t.mode, "Dry")  == 0) last_command.mode_num = 3;
-            else if (strcasecmp(ac_manual_control_t.mode, "Fan")  == 0) last_command.mode_num = 4;
+            if (ac_manual_control_t.fanspeed_err == SUCCESS)
+                last_command.fanspeed = ac_manual_control_t.fanspeed_value;
+            
+            if (ac_manual_control_t.mode_err == SUCCESS)
+            {
+                strcpy(last_command.mode_str, ac_manual_control_t.mode);
+                last_command.mode_num = mode_str_to_num(ac_manual_control_t.mode);   /* [A] fixes "Hot" vs "Heat" */
+            }
             set_blob_in_nvs_flash(IR_HANDLE, NVS_LAST_COMMAND_KEY, &last_command, sizeof(CommandStruct));
         }
     }
@@ -970,6 +1103,103 @@ void locking_feature(const char *description)
     send_manual_control_ack_to_provisioner();
 #endif
 }
+
+// /**
+//  * @brief Function that performs the AC locking feature
+//  *
+//  * Changes made:
+//  * Issue 1 - Power OFF: Locking only triggers when Power=ON.
+//  *            If user presses Power OFF, always accept — never override.
+//  * Issue 2 - Fan Mode: Locking never triggers when mode is Fan.
+//  *            Checked both detected mode from remote and last cloud-set mode.
+//  * Issue 3 - Temperature not in IR description: If isFetchControlInfoSuccessful()
+//  *            returns false (e.g. Fujitsu Power OFF command has no temp in description),
+//  *            skip locking entirely and still send ACK to cloud.
+//  * Issue 4 - mode_num not updated: When user changes mode via physical remote,
+//  *            last_command.mode_num is now updated alongside mode_str so NVS
+//  *            stays consistent after reboot.
+//  * Issue 6 - Power OFF during override: When locking correction fires ir_transmit(),
+//  *            last_command.power is forced to 1 (ON) so the AC actually turns on
+//  *            at the locked temperature instead of receiving a Power OFF command.
+//  */
+// void locking_feature(const char *description)
+// {
+//     // Debug log — print all values before locking decision
+//     ESP_LOGW(IR_TAG, "locking_feature called: locking=%d power_val=%d mode=%s temp_val=%d limits=[%d-%d]",
+//         last_command.locking,
+//         ac_manual_control_t.power_value,
+//         ac_manual_control_t.mode,
+//         ac_manual_control_t.temperature_value,
+//         last_command.lowerTemperatureLimit,
+//         last_command.upperTemperatureLimit);
+
+//     // Issue 3 — If temperature could not be parsed from IR signal,
+//     // skip locking check entirely and fall through to ACK
+//     if (!isFetchControlInfoSuccessful(description))
+//     {
+//         ESP_LOGW(IR_TAG, "Locking feature: temperature not in IR description — skipping locking check");
+//     }
+//     else
+//     {
+//         if (last_command.locking &&                                         // Locking must be enabled by cloud
+//             ac_manual_control_t.power_value == 1 &&                        // Issue 1: Only lock when Power=ON
+//             strcasecmp(ac_manual_control_t.mode, FAN_MODE_STR) != 0 &&     // Issue 2: Skip lock if remote pressed Fan mode
+//             strcasecmp(last_command.mode_str, FAN_MODE_STR) != 0 &&        // Issue 2: Skip lock if last cloud command was Fan mode
+//             !(ac_manual_control_t.temperature_value >= last_command.lowerTemperatureLimit &&
+//               ac_manual_control_t.temperature_value <= last_command.upperTemperatureLimit)) // Temperature outside locked range
+//         {
+//             ESP_LOGW(IR_TAG, "AC temperature limit exceeded  (Current set Temperature : %d) | (Limits %d - %d)",
+//                      ac_manual_control_t.temperature_value,
+//                      last_command.lowerTemperatureLimit,
+//                      last_command.upperTemperatureLimit);
+
+//             // Clamp to nearest limit boundary
+//             // If below lower limit → set to lower limit
+//             // If above upper limit → set to upper limit
+//             if (ac_manual_control_t.temperature_value < last_command.lowerTemperatureLimit)
+//             {
+//                 ESP_LOGW(IR_TAG, "Temp %d below lower limit %d — clamping to lower limit",
+//                     ac_manual_control_t.temperature_value, last_command.lowerTemperatureLimit);
+//                 last_command.temperature = last_command.lowerTemperatureLimit;
+//             }
+//             else if (ac_manual_control_t.temperature_value > last_command.upperTemperatureLimit)
+//             {
+//                 ESP_LOGW(IR_TAG, "Temp %d above upper limit %d — clamping to upper limit",
+//                     ac_manual_control_t.temperature_value, last_command.upperTemperatureLimit);
+//                 last_command.temperature = last_command.upperTemperatureLimit;
+//             }
+
+//             ESP_LOGW(IR_TAG, "Setting AC Temperature to : %d", last_command.temperature);
+//             last_command.power = 1;    // Issue 6: Force Power ON so AC turns on at locked temp
+//             ir_transmit();
+//         }
+//         else
+//         {
+//             // Locking not triggered — accept what user pressed and update last_command
+//             last_command.power = ac_manual_control_t.power_value;
+//             last_command.temperature = ac_manual_control_t.temperature_value;
+//             last_command.fanspeed = ac_manual_control_t.fanspeed_value;
+//             strcpy(last_command.mode_str, ac_manual_control_t.mode);
+//             // Issue 4: Update mode_num alongside mode_str for NVS consistency after reboot
+//             if      (strcasecmp(ac_manual_control_t.mode, "Cool") == 0) last_command.mode_num = 1;
+//             else if (strcasecmp(ac_manual_control_t.mode, "Hot")  == 0) last_command.mode_num = 2;
+//             else if (strcasecmp(ac_manual_control_t.mode, "Auto") == 0) last_command.mode_num = 0;
+//             else if (strcasecmp(ac_manual_control_t.mode, "Dry")  == 0) last_command.mode_num = 3;
+//             else if (strcasecmp(ac_manual_control_t.mode, "Fan")  == 0) last_command.mode_num = 4;
+//             set_blob_in_nvs_flash(IR_HANDLE, NVS_LAST_COMMAND_KEY, &last_command, sizeof(CommandStruct));
+//         }
+//     }
+
+// #if (IS_GWY)
+//     // Gateway: publish manual AC control ACK directly to MQTT
+//     generate_ack(GWY_MANUAL_AC_CONTROL_ACK, NULL);
+// #endif
+
+// #if (!IS_GWY)
+//     // Node: send manual AC control ACK to provisioner over BLE Mesh
+//     send_manual_control_ack_to_provisioner();
+// #endif
+// }
 
 /**
  * @brief Function that initializes the value for teaching mode process
