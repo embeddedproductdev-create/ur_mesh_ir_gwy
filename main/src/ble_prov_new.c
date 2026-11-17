@@ -1192,7 +1192,9 @@ void send_cmd_to_node(CommandStruct *cmd)
         generate_ack(cmd->packetid, cmd);
         return;
     }
-    esp_ble_mesh_client_model_send_msg(&vnd_models[0], &ctx, ESP_BLE_MESH_VND_MODEL_OP_SEND, sizeof(CommandStruct), (uint8_t *)cmd, MSG_TIMEOUT, false, ROLE_PROVISIONER);
+    esp_err_t err = esp_ble_mesh_client_model_send_msg(&vnd_models[0], &ctx, ESP_BLE_MESH_VND_MODEL_OP_SEND, sizeof(CommandStruct), (uint8_t *)cmd, MSG_TIMEOUT, false, ROLE_PROVISIONER);
+    if (err != ESP_OK)
+        ESP_LOGE(BLE_TAG, "Send to 0x%04x failed: %s", cmd->elemaddr, esp_err_to_name(err));
 }
 
 /**

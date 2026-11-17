@@ -1898,6 +1898,7 @@ void handle_multi_ac_control(CommandStruct *cmd, uint16_t *addrs, uint8_t count)
         cmd->msgseqno = (uint16_t)((tracker->seq * 100) + i);   // unique per node
         ESP_LOGI(LTE_TAG, "Multi-unicast = node 0x%04x [%d/%d]", addrs[i], i + 1, count);
         send_cmd_to_node(cmd);
+        vTaskDelay(pdMS_TO_TICKS(50)); 
     }
 
     // Immediate ACK to cloud — command dispatched to all nodes
